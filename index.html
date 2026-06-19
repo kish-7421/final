@@ -14,7 +14,6 @@ html,body{
   touch-action:none;
   font-family:Arial,sans-serif;
 }
-
 canvas{
   display:block;
   margin:auto;
@@ -54,58 +53,47 @@ const CFG={
   penaltyShowTime:2,
   specialInterval:19,
   invincibleTime:2,
-  dodgeFadeTime:0.15
+  dodgeFadeTime:0.15,
+  dragSensitivity:1.15
 };
 
 const game={
   started:false,
   gameOver:false,
-
   countdown:3,
   countdownTimer:0,
   showStart:false,
   startTimer:0,
-
   time:0,
   last:0,
-
   hp:CFG.startHp,
   maxHp:CFG.startHp,
-
   regen:0,
   dodge:0,
   damageReduce:0,
   bulletBonus:0,
   bulletSlow:0,
-
   hasRevive:false,
   reviveUsed:false,
   invincible:0,
   dodgeFade:0,
-
   bullets:[],
   texts:[],
   warnings:[],
   delayed:[],
-
   activeAttacks:[],
   attackScheduleIndex:0,
-
   specialTimer:0,
   lastSpecial:null,
-
   nextCardTime:CFG.cardInterval,
   cardOpen:false,
   cardTimer:0,
   cardChoices:[],
-
   penaltyOpen:false,
   penaltyTimer:0,
   penaltyText:"",
-
   ownedCards:new Set(),
   ownedPenalties:new Set(),
-
   best:Number(localStorage.getItem("ultimate_survival_best")||0),
   newRecord:false
 };
@@ -136,30 +124,17 @@ const input={
   dy:0
 };
 
-const swipe={
+const drag={
   active:false,
   touchId:null,
-  startX:0,
-  startY:0,
-  currentX:0,
-  currentY:0
+  lastX:0,
+  lastY:0
 };
 
-function left(){
-  return arena.x-arena.w/2;
-}
-
-function right(){
-  return arena.x+arena.w/2;
-}
-
-function topY(){
-  return arena.y-arena.h/2;
-}
-
-function bottom(){
-  return arena.y+arena.h/2;
-}
+function left(){return arena.x-arena.w/2;}
+function right(){return arena.x+arena.w/2;}
+function topY(){return arena.y-arena.h/2;}
+function bottom(){return arena.y+arena.h/2;}
 
 function clamp(v,a,b){
   return Math.max(a,Math.min(b,v));
@@ -178,42 +153,28 @@ function rand(arr){
   return arr[Math.floor(Math.random()*arr.length)];
 }
 
-function getPointer(e){
+function getPointerFromClient(clientX,clientY){
   const rect=canvas.getBoundingClientRect();
-  const p=e.changedTouches?e.changedTouches[0]:e;
 
   return {
-    x:(p.clientX-rect.left)*canvas.width/rect.width,
-    y:(p.clientY-rect.top)*canvas.height/rect.height
+    x:(clientX-rect.left)*canvas.width/rect.width,
+    y:(clientY-rect.top)*canvas.height/rect.height
   };
 }
 
-function updateSwipeInput(){
-  let dx=swipe.currentX-swipe.startX;
-  let dy=swipe.currentY-swipe.startY;
-
-  swipe.startX=swipe.currentX;
-  swipe.startY=swipe.currentY;
-
-  dx=clamp(dx/60,-1,1);
-  dy=clamp(dy/60,-1,1);
-
-  const d=Math.hypot(dx,dy);
-
-  if(d>1){
-    dx/=d;
-    dy/=d;
-  }
-
-  input.dx=dx;
-  input.dy=dy;
+function getPointer(e){
+  const p=e.changedTouches?e.changedTouches[0]:e;
+  return getPointerFromClient(p.clientX,p.clientY);
 }
 
-function stopSwipe(){
-  swipe.active=false;
-  swipe.touchId=null;
-  input.dx=0;
-  input.dy=0;
+function clampPlayer(){
+  player.x=clamp(player.x,left()+player.r,right()-player.r);
+  player.y=clamp(player.y,topY()+player.r,bottom()-player.r);
+}
+
+function stopDrag(){
+  drag.active=false;
+  drag.touchId=null;
 }
 
 function resetGame(){
@@ -271,7 +232,7 @@ function resetGame(){
   player.x=W/2;
   player.y=H/2;
 
-  stopSwipe();
+  stopDrag();
 }
 
 window.addEventListener("keydown",e=>{
@@ -310,29 +271,33 @@ canvas.addEventListener("touchstart",e=>{
 
   const t=e.changedTouches[0];
 
-  swipe.active=true;
-  swipe.touchId=t.identifier;
-  swipe.startX=p.x;
-  swipe.startY=p.y;
-  swipe.currentX=p.x;
-  swipe.currentY=p.y;
-
-  input.dx=0;
-  input.dy=0;
+  drag.active=true;
+  drag.touchId=t.identifier;
+  drag.lastX=p.x;
+  drag.lastY=p.y;
 
   e.preventDefault();
 },{passive:false});
 
 canvas.addEventListener("touchmove",e=>{
-  if(!swipe.active)return;
-
-  const rect=canvas.getBoundingClientRect();
+  if(!drag.active){
+    return;
+  }
 
   for(const t of e.changedTouches){
-    if(t.identifier===swipe.touchId){
-      swipe.currentX=(t.clientX-rect.left)*canvas.width/rect.width;
-      swipe.currentY=(t.clientY-rect.top)*canvas.height/rect.height;
-      updateSwipeInput();
+    if(t.identifier===drag.touchId){
+      const p=getPointerFromClient(t.clientX,t.clientY);
+
+      const dx=p.x-drag.lastX;
+      const dy=p.y-drag.lastY;
+
+      player.x+=dx*CFG.dragSensitivity;
+      player.y+=dy*CFG.dragSensitivity;
+
+      clampPlayer();
+
+      drag.lastX=p.x;
+      drag.lastY=p.y;
     }
   }
 
@@ -341,8 +306,8 @@ canvas.addEventListener("touchmove",e=>{
 
 canvas.addEventListener("touchend",e=>{
   for(const t of e.changedTouches){
-    if(t.identifier===swipe.touchId){
-      stopSwipe();
+    if(t.identifier===drag.touchId){
+      stopDrag();
     }
   }
 
@@ -350,7 +315,7 @@ canvas.addEventListener("touchend",e=>{
 },{passive:false});
 
 canvas.addEventListener("touchcancel",e=>{
-  stopSwipe();
+  stopDrag();
   e.preventDefault();
 },{passive:false});
 
@@ -443,7 +408,11 @@ function handleDeath(){
 }
 
 function updateInput(){
-  if(swipe.active)return;
+  if(drag.active){
+    input.dx=0;
+    input.dy=0;
+    return;
+  }
 
   let x=0;
   let y=0;
@@ -468,8 +437,7 @@ function updatePlayer(dt){
   player.x+=input.dx*player.speed*dt;
   player.y+=input.dy*player.speed*dt;
 
-  player.x=clamp(player.x,left()+player.r,right()-player.r);
-  player.y=clamp(player.y,topY()+player.r,bottom()-player.r);
+  clampPlayer();
 }
 
 function updateBullets(dt){
@@ -582,16 +550,16 @@ const attackIds=[
 ];
 
 const attackCooldown={
-  A1:0.8,
-  A2:1.2,
-  A3:1.8,
-  A4:1.5,
-  A5:1.5,
-  A6:2.0,
-  A7:3.0,
-  A8:2.5,
-  A9:2.0,
-  A10:1.0
+  A1:1.8,
+  A2:2.2,
+  A3:2.8,
+  A4:2.5,
+  A5:2.5,
+  A6:3.0,
+  A7:4.0,
+  A8:3.5,
+  A9:3.0,
+  A10:2.0
 };
 
 const attackTimer={
@@ -601,10 +569,14 @@ const attackTimer={
 
 const attackSchedule=[
   {time:2,count:2},
-  {time:30,count:2},
-  {time:60,count:2},
-  {time:90,count:2},
-  {time:120,count:2}
+  {time:30,count:1},
+  {time:60,count:1},
+  {time:90,count:1},
+  {time:120,count:1},
+  {time:150,count:1},
+  {time:180,count:1},
+  {time:210,count:1},
+  {time:240,count:1}
 ];
 
 const attacks={
@@ -1421,6 +1393,3 @@ requestAnimationFrame(loop);
 </script>
 </body>
 </html>
-'''
-open('/mnt/data/index.html', 'w', encoding='utf-8').write(html)
-print("완료: /mnt/data/index.html")
