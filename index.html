@@ -53,8 +53,7 @@ const CFG={
   penaltyShowTime:2,
   specialInterval:19,
   invincibleTime:2,
-  dodgeFadeTime:0.15,
-  dragSensitivity:1.15
+  dodgeFadeTime:0.15
 };
 
 const game={
@@ -124,11 +123,13 @@ const input={
   dy:0
 };
 
-const drag={
+const swipe={
   active:false,
   touchId:null,
-  lastX:0,
-  lastY:0
+  startX:0,
+  startY:0,
+  currentX:0,
+  currentY:0
 };
 
 function left(){return arena.x-arena.w/2;}
@@ -153,18 +154,39 @@ function rand(arr){
   return arr[Math.floor(Math.random()*arr.length)];
 }
 
-function getPointerFromClient(clientX,clientY){
+function getPointer(e){
   const rect=canvas.getBoundingClientRect();
+  const p=e.changedTouches?e.changedTouches[0]:e;
 
   return {
-    x:(clientX-rect.left)*canvas.width/rect.width,
-    y:(clientY-rect.top)*canvas.height/rect.height
+    x:(p.clientX-rect.left)*canvas.width/rect.width,
+    y:(p.clientY-rect.top)*canvas.height/rect.height
   };
 }
 
-function getPointer(e){
-  const p=e.changedTouches?e.changedTouches[0]:e;
-  return getPointerFromClient(p.clientX,p.clientY);
+function updateSwipeInput(){
+  let dx=swipe.currentX-swipe.startX;
+  let dy=swipe.currentY-swipe.startY;
+
+  dx=clamp(dx/60,-1,1);
+  dy=clamp(dy/60,-1,1);
+
+  const d=Math.hypot(dx,dy);
+
+  if(d>1){
+    dx/=d;
+    dy/=d;
+  }
+
+  input.dx=dx;
+  input.dy=dy;
+}
+
+function stopSwipe(){
+  swipe.active=false;
+  swipe.touchId=null;
+  input.dx=0;
+  input.dy=0;
 }
 
 function clampPlayer(){
@@ -172,67 +194,48 @@ function clampPlayer(){
   player.y=clamp(player.y,topY()+player.r,bottom()-player.r);
 }
 
-function stopDrag(){
-  drag.active=false;
-  drag.touchId=null;
-}
-
 function resetGame(){
   game.started=false;
   game.gameOver=false;
-
   game.countdown=3;
   game.countdownTimer=0;
   game.showStart=false;
   game.startTimer=0;
-
   game.time=0;
   game.last=0;
-
   game.hp=CFG.startHp;
   game.maxHp=CFG.startHp;
-
   game.regen=0;
   game.dodge=0;
   game.damageReduce=0;
   game.bulletBonus=0;
   game.bulletSlow=0;
-
   game.hasRevive=false;
   game.reviveUsed=false;
   game.invincible=0;
   game.dodgeFade=0;
-
   game.bullets.length=0;
   game.texts.length=0;
   game.warnings.length=0;
   game.delayed.length=0;
-
   game.activeAttacks=[];
   game.attackScheduleIndex=0;
-
   game.specialTimer=0;
   game.lastSpecial=null;
-
   game.nextCardTime=CFG.cardInterval;
   game.cardOpen=false;
   game.cardTimer=0;
   game.cardChoices=[];
-
   game.penaltyOpen=false;
   game.penaltyTimer=0;
   game.penaltyText="";
-
   game.ownedCards.clear();
   game.ownedPenalties.clear();
-
   game.best=Number(localStorage.getItem("ultimate_survival_best")||0);
   game.newRecord=false;
-
   player.x=W/2;
   player.y=H/2;
-
-  stopDrag();
+  stopSwipe();
 }
 
 window.addEventListener("keydown",e=>{
@@ -271,33 +274,29 @@ canvas.addEventListener("touchstart",e=>{
 
   const t=e.changedTouches[0];
 
-  drag.active=true;
-  drag.touchId=t.identifier;
-  drag.lastX=p.x;
-  drag.lastY=p.y;
+  swipe.active=true;
+  swipe.touchId=t.identifier;
+  swipe.startX=p.x;
+  swipe.startY=p.y;
+  swipe.currentX=p.x;
+  swipe.currentY=p.y;
+
+  input.dx=0;
+  input.dy=0;
 
   e.preventDefault();
 },{passive:false});
 
 canvas.addEventListener("touchmove",e=>{
-  if(!drag.active){
-    return;
-  }
+  if(!swipe.active)return;
+
+  const rect=canvas.getBoundingClientRect();
 
   for(const t of e.changedTouches){
-    if(t.identifier===drag.touchId){
-      const p=getPointerFromClient(t.clientX,t.clientY);
-
-      const dx=p.x-drag.lastX;
-      const dy=p.y-drag.lastY;
-
-      player.x+=dx*CFG.dragSensitivity;
-      player.y+=dy*CFG.dragSensitivity;
-
-      clampPlayer();
-
-      drag.lastX=p.x;
-      drag.lastY=p.y;
+    if(t.identifier===swipe.touchId){
+      swipe.currentX=(t.clientX-rect.left)*canvas.width/rect.width;
+      swipe.currentY=(t.clientY-rect.top)*canvas.height/rect.height;
+      updateSwipeInput();
     }
   }
 
@@ -306,8 +305,8 @@ canvas.addEventListener("touchmove",e=>{
 
 canvas.addEventListener("touchend",e=>{
   for(const t of e.changedTouches){
-    if(t.identifier===drag.touchId){
-      stopDrag();
+    if(t.identifier===swipe.touchId){
+      stopSwipe();
     }
   }
 
@@ -315,7 +314,7 @@ canvas.addEventListener("touchend",e=>{
 },{passive:false});
 
 canvas.addEventListener("touchcancel",e=>{
-  stopDrag();
+  stopSwipe();
   e.preventDefault();
 },{passive:false});
 
@@ -408,11 +407,7 @@ function handleDeath(){
 }
 
 function updateInput(){
-  if(drag.active){
-    input.dx=0;
-    input.dy=0;
-    return;
-  }
+  if(swipe.active)return;
 
   let x=0;
   let y=0;
