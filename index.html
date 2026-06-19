@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Ultimate Survival</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;background:black;touch-action:none;font-family:Arial,sans-serif;}
+
+canvas{
+  display:block;
+  margin:auto;
+  background:black;
+  touch-action:none;
+  width:450px;
+  height:900px;
+  max-width:100vw;
+  max-height:100vh;
+}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+canvas.width=450;
+canvas.height=900;
+
+const W=450,H=900;
+
+const CFG={
+  startHp:160,
+  playerR:10,
+  playerSpeed:280,
+  arenaW:300,
+  arenaH:680,
+  normalDamage:10,
+  specialDamage:20,
+  normalR:7,
+  specialR:11,
+  maxBullets:500,
+  cardInterval:25,
+  cardSelectTime:10,
+  penaltyShowTime:2,
+  specialInterval:19,
+  invincibleTime:2,
+  dodgeFadeTime:0.15
+};
+
+const game={
+  started:false,gameOver:false,
+  countdown:3,countdownTimer:0,showStart:false,startTimer:0,
+  time:0,last:0,
+  hp:CFG.startHp,maxHp:CFG.startHp,
+  regen:0,dodge:0,damageReduce:0,bulletBonus:0,bulletSlow:0,
+  hasRevive:false,reviveUsed:false,invincible:0,dodgeFade:0,
+  bullets:[],texts:[],warnings:[],delayed:[],
+  activeAttacks:[],attackScheduleIndex:0,specialTimer:0,lastSpecial:null,
+  nextCardTime:CFG.cardInterval,cardOpen:false,cardTimer:0,cardChoices:[],
+  penaltyOpen:false,penaltyTimer:0,penaltyText:"",
+  ownedCards:new Set(),ownedPenalties:new Set(),
+  best:Number(localStorage.getItem("ultimate_survival_best")||0),
+  newRecord:false
+};
+
+const player={x:W/2,y:H/2,r:CFG.playerR,speed:CFG.playerSpeed};
+const arena={x:W/2,y:H/2,w:CFG.arenaW,h:CFG.arenaH};
+
+const keys={up:false,down:false,left:false,right:false};
+const input={dx:0,dy:0};
+
+const swipe={
+  active:false,
+  touchId:null,
+  startX:0,
+  startY:0,
+  currentX:0,
+  currentY:0
+};
+
+function left(){return arena.x-arena.w/2;}
+function right(){return arena.x+arena.w/2;}
+function topY(){return arena.y-arena.h/2;}
+function bottom(){return arena.y+arena.h/2;}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function distance(x1,y1,x2,y2){return Math.hypot(x1-x2,y1-y2);}
+function fmt(t){t=Math.floor(t);return String(Math.floor(t/60)).padStart(2,"0")+":"+String(t%60).padStart(2,"0");}
+function rand(arr){return arr[Math.floor(Math.random()*arr.length)];}
+
+function getPointer(e){
+  const rect=canvas.getBoundingClientRect();
+  const p=e.changedTouches?e.changedTouches[0]:e;
+
+  return {
+    x:(p.clientX-rect.left)*canvas.width/rect.width,
+    y:(p.clientY-rect.top)*canvas.height/rect.height
+  };
+}
+
+function updateSwipeInput(){
+  let dx=swipe.currentX-swipe.startX;
+  let dy=swipe.currentY-swipe.startY;
+
+  dx=clamp(dx/60,-1,1);
+  dy=clamp(dy/60,-1,1);
+
+  const d=Math.hypot(dx,dy);
+
+  if(d>1){
+    dx/=d;
+    dy/=d;
+  }
+
+  input.dx=dx;
+  input.dy=dy;
+}
+
+function stopSwipe(){
+  swipe.active=false;
+  swipe.touchId=null;
+  input.dx=0;
+  input.dy=0;
+}
+
+function resetGame(){
+  game.started=false;game.gameOver=false;
+  game.countdown=3;game.countdownTimer=0;game.showStart=false;game.startTimer=0;
+  game.time=0;game.last=0;
+  game.hp=CFG.startHp;game.maxHp=CFG.startHp;
+  game.regen=0;game.dodge=0;game.damageReduce=0;game.bulletBonus=0;game.bulletSlow=0;
+  game.hasRevive=false;game.reviveUsed=false;game.invincible=0;game.dodgeFade=0;
+  game.bullets.length=0;game.texts.length=0;game.warnings.length=0;game.delayed.length=0;
+  game.activeAttacks=[];game.attackScheduleIndex=0;game.specialTimer=0;game.lastSpecial=null;
+  game.nextCardTime=CFG.cardInterval;game.cardOpen=false;game.cardTimer=0;game.cardChoices=[];
+  game.penaltyOpen=false;game.penaltyTimer=0;game.penaltyText="";
+  game.ownedCards.clear();game.ownedPenalties.clear();
+  game.best=Number(localStorage.getItem("ultimate_survival_best")||0);
+  game.newRecord=false;
+  player.x=W/2;player.y=H/2;
+  stopSwipe();
+}
+
+window.addEventListener("keydown",e=>{
+  if(e.key==="w"||e.key==="W"||e.key==="ArrowUp")keys.up=true;
+  if(e.key==="s"||e.key==="S"||e.key==="ArrowDown")keys.down=true;
+  if(e.key==="a"||e.key==="A"||e.key==="ArrowLeft")keys.left=true;
+  if(e.key==="d"||e.key==="D"||e.key==="ArrowRight")keys.right=true;
+});
+
+window.addEventListener("keyup",e=>{
+  if(e.key==="w"||e.key==="W"||e.key==="ArrowUp")keys.up=false;
+  if(e.key==="s"||e.key==="S"||e.key==="ArrowDown")keys.down=false;
+  if(e.key==="a"||e.key==="A"||e.key==="ArrowLeft")keys.left=false;
+  if(e.key==="d"||e.key==="D"||e.key==="ArrowRight")keys.right=false;
+});
+
+canvas.addEventListener("touchstart",e=>{
+  const p=getPointer(e);
+
+  if(game.gameOver){handleRestartClick(p.x,p.y);e.preventDefault();return;}
+  if(game.cardOpen){handleCardClick(p.x,p.y);e.preventDefault();return;}
+  if(game.penaltyOpen){e.preventDefault();return;}
+
+  const t=e.changedTouches[0];
+
+  swipe.active=true;
+  swipe.touchId=t.identifier;
+  swipe.startX=p.x;
+  swipe.startY=p.y;
+  swipe.currentX=p.x;
+  swipe.currentY=p.y;
+
+  input.dx=0;
+  input.dy=0;
+
+  e.preventDefault();
+},{passive:false});
+
+canvas.addEventListener("touchmove",e=>{
+  if(!swipe.active)return;
+
+  const rect=canvas.getBoundingClientRect();
+
+  for(const t of e.changedTouches){
+    if(t.identifier===swipe.touchId){
+      swipe.currentX=(t.clientX-rect.left)*canvas.width/rect.width;
+      swipe.currentY=(t.clientY-rect.top)*canvas.height/rect.height;
+      updateSwipeInput();
+    }
+  }
+
+  e.preventDefault();
+},{passive:false});
+
+canvas.addEventListener("touchend",e=>{
+  for(const t of e.changedTouches){
+    if(t.identifier===swipe.touchId){
+      stopSwipe();
+    }
+  }
+
+  e.preventDefault();
+},{passive:false});
+
+canvas.addEventListener("touchcancel",e=>{
+  stopSwipe();
+  e.preventDefault();
+},{passive:false});
+
+canvas.addEventListener("click",e=>{
+  const p=getPointer(e);
+  if(game.gameOver)handleRestartClick(p.x,p.y);
+  if(game.cardOpen)handleCardClick(p.x,p.y);
+});
+
+function addText(text,x,y,color="white"){
+  game.texts.push({text,x,y,color,life:0.6,max:0.6});
+}
+
+function createBullet(o){
+  game.bullets.push({
+    x:o.x,y:o.y,vx:o.vx,vy:o.vy,
+    r:o.r||(o.type==="special"?CFG.specialR:CFG.normalR),
+    damage:o.damage||(o.type==="special"?CFG.specialDamage:CFG.normalDamage),
+    type:o.type||"normal",
+    color:o.color||(o.type==="special"?"#ff3333":"#ffcc33"),
+    life:o.life??null
+  });
+
+  while(game.bullets.length>CFG.maxBullets)game.bullets.shift();
+}
+
+function bulletSpeedMultiplier(){
+  return Math.max(0.25,1+game.bulletBonus-game.bulletSlow);
+}
+
+function damagePlayer(amount,ignoreReduction=false){
+  if(game.gameOver)return;
+  if(game.invincible>0)return;
+
+  if(!ignoreReduction){
+    if(Math.random()<game.dodge){
+      game.dodgeFade=CFG.dodgeFadeTime;
+      addText("회피",player.x+18,player.y-18,"white");
+      return;
+    }
+    amount*=1-game.damageReduce;
+  }
+
+  game.hp-=amount;
+  if(game.hp<0)game.hp=0;
+  if(game.hp<=0)handleDeath();
+}
+
+function handleDeath(){
+  if(game.hasRevive&&!game.reviveUsed){
+    game.reviveUsed=true;
+    game.hasRevive=false;
+    game.hp=game.maxHp*0.3;
+    game.invincible=CFG.invincibleTime;
+    return;
+  }
+
+  game.gameOver=true;
+
+  if(game.time>game.best){
+    game.best=game.time;
+    game.newRecord=true;
+    localStorage.setItem("ultimate_survival_best",String(game.best));
+  }
+}
+
+function updateInput(){
+  if(swipe.active)return;
+
+  let x=0,y=0;
+
+  if(keys.left)x--;
+  if(keys.right)x++;
+  if(keys.up)y--;
+  if(keys.down)y++;
+
+  const d=Math.hypot(x,y);
+
+  if(d>1){
+    x/=d;
+    y/=d;
+  }
+
+  input.dx=x;
+  input.dy=y;
+}
+
+function updatePlayer(dt){
+  player.x+=input.dx*player.speed*dt;
+  player.y+=input.dy*player.speed*dt;
+
+  player.x=clamp(player.x,left()+player.r,right()-player.r);
+  player.y=clamp(player.y,topY()+player.r,bottom()-player.r);
+}
+
+function updateBullets(dt){
+  const mul=bulletSpeedMultiplier();
+
+  for(let i=game.bullets.length-1;i>=0;i--){
+    const b=game.bullets[i];
+
+    if(b.life!==null){
+      b.life-=dt;
+      if(b.life<=0){
+        game.bullets.splice(i,1);
+        continue;
+      }
+    }
+
+    b.x+=b.vx*dt*mul;
+    b.y+=b.vy*dt*mul;
+
+    if(b.x<-120||b.x>W+120||b.y<-120||b.y>H+120){
+      game.bullets.splice(i,1);
+      continue;
+    }
+
+    if(distance(b.x,b.y,player.x,player.y)<=b.r+player.r){
+      damagePlayer(b.damage,false);
+      game.bullets.splice(i,1);
+    }
+  }
+}
+
+function updateEffects(dt){
+  for(let i=game.texts.length-1;i>=0;i--){
+    const f=game.texts[i];
+    f.life-=dt;
+    f.y-=20*dt;
+    if(f.life<=0)game.texts.splice(i,1);
+  }
+
+  for(let i=game.warnings.length-1;i>=0;i--){
+    const w=game.warnings[i];
+    w.life-=dt;
+    if(w.life<=0)game.warnings.splice(i,1);
+  }
+
+  for(let i=game.delayed.length-1;i>=0;i--){
+    const ev=game.delayed[i];
+    ev.time-=dt;
+    if(ev.time<=0){
+      ev.fn();
+      game.delayed.splice(i,1);
+    }
+  }
+
+  if(game.invincible>0)game.invincible=Math.max(0,game.invincible-dt);
+  if(game.dodgeFade>0)game.dodgeFade=Math.max(0,game.dodgeFade-dt);
+}
+
+function updateRules(dt){
+  if(game.regen>0){
+    game.hp=Math.min(game.maxHp,game.hp+game.maxHp*game.regen*dt);
+  }
+}
+
+function shootAngle(x,y,a,s,type="normal",r=null){
+  createBullet({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,type,r});
+}
+
+function shootAt(x,y,tx,ty,s,type="normal",r=null){
+  const dx=tx-x,dy=ty-y,d=Math.hypot(dx,dy)||1;
+  createBullet({x,y,vx:dx/d*s,vy:dy/d*s,type,r});
+}
+
+const attackIds=["A1","A2","A3","A4","A5","A6","A7","A8","A9","A10"];
+const attackCooldown={A1:0.8,A2:1.2,A3:1.8,A4:1.5,A5:1.5,A6:2.0,A7:3.0,A8:2.5,A9:2.0,A10:1.0};
+const attackTimer={A1:0,A2:0,A3:0,A4:0,A5:0,A6:0,A7:0,A8:0,A9:0,A10:0};
+const attackSchedule=[
+  {time:2,count:3},
+  {time:30,count:2},
+  {time:60,count:2},
+  {time:90,count:2},
+  {time:120,count:1}
+];
+
+const attacks={
+  A1(){
+    const s=230, side=Math.floor(Math.random()*4);
+    if(side===0)shootAt(left()-20,player.y,player.x,player.y,s);
+    else if(side===1)shootAt(right()+20,player.y,player.x,player.y,s);
+    else if(side===2)shootAt(player.x,topY()-20,player.x,player.y,s);
+    else shootAt(player.x,bottom()+20,player.x,player.y,s);
+  },
+
+  A2(){
+    const x=left()-20,y=topY()+Math.random()*arena.h;
+    const base=Math.atan2(player.y-y,player.x-x);
+    for(let i=-1;i<=1;i++)shootAngle(x,y,base+i*0.18,210);
+  },
+
+  A3(){
+    const x=right()+20,y=topY()+Math.random()*arena.h;
+    const base=Math.atan2(player.y-y,player.x-x);
+    for(let i=-2;i<=2;i++)shootAngle(x,y,base+i*0.16,200);
+  },
+
+  A4(){
+    for(const a of [0,Math.PI,Math.PI/2,Math.PI*1.5])shootAngle(arena.x,arena.y,a,210);
+  },
+
+  A5(){
+    for(const a of [Math.PI/4,Math.PI*3/4,Math.PI*5/4,Math.PI*7/4])shootAngle(arena.x,arena.y,a,210);
+  },
+
+  A6(){
+    for(let i=0;i<8;i++)shootAngle(arena.x,arena.y,Math.PI*2/8*i,190);
+  },
+
+  A7(){
+    for(let i=0;i<12;i++){
+      const a=Math.PI*2/12*i;
+      shootAngle(arena.x,arena.y,a,170);
+      shootAngle(arena.x,arena.y,a+0.12,230);
+    }
+  },
+
+  A8(){
+    const fromLeft=Math.random()<0.5;
+    const gap=Math.floor(Math.random()*5);
+
+    for(let i=0;i<7;i++){
+      if(i===gap||i===gap+1)continue;
+      const y=topY()+70+i*100;
+
+      if(fromLeft)createBullet({x:left()-25,y,vx:180,vy:0,r:9});
+      else createBullet({x:right()+25,y,vx:-180,vy:0,r:9});
+    }
+  },
+
+  A9(){
+    for(let i=0;i<5;i++){
+      createBullet({
+        x:left()+Math.random()*arena.w,
+        y:topY()-25-Math.random()*80,
+        vx:(Math.random()-0.5)*60,
+        vy:190,
+        r:CFG.normalR
+      });
+    }
+  },
+
+  A10(){
+    const fromLeft=Math.random()<0.5;
+    const x=fromLeft?left()-25:right()+25;
+    const y=topY()+Math.random()*arena.h;
+    shootAt(x,y,player.x,player.y,260);
+  }
+};
+
+function addAttacks(count){
+  const available=attackIds.filter(id=>!game.activeAttacks.includes(id));
+
+  for(let i=0;i<count&&available.length>0;i++){
+    const id=rand(available);
+    game.activeAttacks.push(id);
+    attackTimer[id]=0;
+    available.splice(available.indexOf(id),1);
+  }
+}
+
+function updateAttacks(dt){
+  while(
+    game.attackScheduleIndex<attackSchedule.length &&
+    game.time>=attackSchedule[game.attackScheduleIndex].time
+  ){
+    addAttacks(attackSchedule[game.attackScheduleIndex].count);
+    game.attackScheduleIndex++;
+  }
+
+  for(const id of game.activeAttacks){
+    attackTimer[id]+=dt;
+    if(attackTimer[id]>=attackCooldown[id]){
+      attackTimer[id]=0;
+      attacks[id]();
+    }
+  }
+}
+
+function addWarning(type,data){
+  game.warnings.push({type,...data,life:1.5,max:1.5});
+}
+
+const specials={
+  S1(){
+    const a=Math.random()*Math.PI*2;
+    addWarning("line",{x:arena.x,y:arena.y,a});
+
+    game.delayed.push({
+      time:1.5,
+      fn(){
+        for(let i=-12;i<=12;i++){
+          createBullet({
+            x:arena.x+Math.cos(a)*i*22,
+            y:arena.y+Math.sin(a)*i*22,
+            vx:0,vy:0,type:"special",r:CFG.specialR,life:0.35
+          });
+        }
+      }
+    });
+  },
+
+  S2(){
+    addWarning("circle",{x:arena.x,y:arena.y,r:150});
+
+    game.delayed.push({
+      time:1.5,
+      fn(){
+        for(let i=0;i<24;i++)shootAngle(arena.x,arena.y,Math.PI*2/24*i,250,"special");
+      }
+    });
+  },
+
+  S3(){
+    addWarning("cross",{x:arena.x,y:arena.y});
+
+    game.delayed.push({
+      time:1.5,
+      fn(){
+        for(let i=-4;i<=4;i++){
+          createBullet({x:arena.x+i*28,y:arena.y,vx:0,vy:260,type:"special"});
+          createBullet({x:arena.x+i*28,y:arena.y,vx:0,vy:-260,type:"special"});
+          createBullet({x:arena.x,y:arena.y+i*28,vx:260,vy:0,type:"special"});
+          createBullet({x:arena.x,y:arena.y+i*28,vx:-260,vy:0,type:"special"});
+        }
+      }
+    });
+  },
+
+  S4(){
+    addWarning("circle",{x:arena.x,y:arena.y,r:130});
+
+    game.delayed.push({
+      time:1.5,
+      fn(){
+        for(let r=0;r<2;r++){
+          for(let i=0;i<16;i++){
+            shootAngle(arena.x,arena.y,Math.PI*2/16*i+r*0.1,190+r*70,"special");
+          }
+        }
+      }
+    });
+  },
+
+  S5(){
+    addWarning("circle",{x:arena.x,y:arena.y,r:120});
+
+    for(let k=0;k<3;k++){
+      game.delayed.push({
+        time:1.5+k*0.4,
+        fn(){
+          for(let i=0;i<14;i++)shootAngle(arena.x,arena.y,Math.PI*2/14*i,230,"special");
+        }
+      });
+    }
+  },
+
+  S6(){
+    addWarning("cross",{x:arena.x,y:arena.y});
+
+    for(let k=0;k<3;k++){
+      game.delayed.push({
+        time:1.5+k*0.4,
+        fn(){
+          for(const a of [0,Math.PI,Math.PI/2,Math.PI*1.5]){
+            shootAngle(arena.x,arena.y,a,280,"special",13);
+          }
+        }
+      });
+    }
+  },
+
+  S7(){
+    addWarning("circle",{x:arena.x,y:arena.y,r:100});
+
+    game.delayed.push({
+      time:1.5,
+      fn(){
+        for(let i=0;i<8;i++)shootAngle(arena.x,arena.y,Math.PI*2/8*i,320,"special",15);
+      }
+    });
+  }
+};
+
+function updateSpecials(dt){
+  game.specialTimer+=dt;
+  if(game.specialTimer<CFG.specialInterval)return;
+
+  game.specialTimer=0;
+
+  const ids=Object.keys(specials).filter(id=>id!==game.lastSpecial);
+  const id=rand(ids);
+  game.lastSpecial=id;
+  specials[id]();
+}
+
+const cardData=[
+  {id:"C1",rarity:"common",name:"최대체력 I",desc:"최대 HP +20",apply(){game.maxHp+=20;game.hp+=20;}},
+  {id:"C2",rarity:"rare",name:"최대체력 II",desc:"최대 HP +40",apply(){game.maxHp+=40;game.hp+=40;}},
+  {id:"C3",rarity:"epic",name:"최대체력 III",desc:"최대 HP +60",apply(){game.maxHp+=60;game.hp+=60;}},
+  {id:"C4",rarity:"common",name:"재생 I",desc:"초당 최대 HP 0.5% 회복",apply(){game.regen+=0.005;}},
+  {id:"C5",rarity:"rare",name:"재생 II",desc:"초당 최대 HP 0.8% 회복",apply(){game.regen+=0.008;}},
+  {id:"C6",rarity:"epic",name:"재생 III",desc:"초당 최대 HP 1.3% 회복",apply(){game.regen+=0.013;}},
+  {id:"C7",rarity:"common",name:"회피 I",desc:"회피 확률 +2%",apply(){game.dodge+=0.02;}},
+  {id:"C8",rarity:"rare",name:"회피 II",desc:"회피 확률 +5%",apply(){game.dodge+=0.05;}},
+  {id:"C9",rarity:"epic",name:"회피 III",desc:"회피 확률 +8%",apply(){game.dodge+=0.08;}},
+  {id:"C10",rarity:"common",name:"피해감소 I",desc:"받는 피해 5% 감소",apply(){game.damageReduce+=0.05;}},
+  {id:"C11",rarity:"rare",name:"피해감소 II",desc:"받는 피해 10% 감소",apply(){game.damageReduce+=0.10;}},
+  {id:"C12",rarity:"epic",name:"피해감소 III",desc:"받는 피해 15% 감소",apply(){game.damageReduce+=0.15;}},
+  {id:"C13",rarity:"legendary",name:"대회복",desc:"최대 HP의 75% 회복",apply(){game.hp=Math.min(game.maxHp,game.hp+game.maxHp*0.75);}},
+  {id:"C14",rarity:"legendary",name:"부활",desc:"사망 시 1회 부활",apply(){game.hasRevive=true;}}
+];
+
+const penaltyData=[
+  {id:"P1",name:"탄속 증가 I",desc:"적 탄속 +15%",apply(){game.bulletBonus+=0.15;}},
+  {id:"P2",name:"탄속 증가 II",desc:"적 탄속 +20%",apply(){game.bulletBonus+=0.20;}},
+  {id:"P3",name:"탄속 증가 III",desc:"적 탄속 +30%",apply(){game.bulletBonus+=0.30;}}
+];
+
+function remainingCards(){
+  return cardData.filter(c=>!game.ownedCards.has(c.id));
+}
+
+function remainingPenalties(){
+  return penaltyData.filter(p=>!game.ownedPenalties.has(p.id));
+}
+
+function pickCard(pool){
+  const weights=[
+    ["common",60],
+    ["rare",25],
+    ["epic",12],
+    ["legendary",3]
+  ].filter(([r])=>pool.some(c=>c.rarity===r));
+
+  let total=weights.reduce((a,b)=>a+b[1],0);
+  let roll=Math.random()*total;
+
+  for(const [rarity,weight] of weights){
+    if(roll<weight)return rand(pool.filter(c=>c.rarity===rarity));
+    roll-=weight;
+  }
+
+  return rand(pool);
+}
+
+function openCardEvent(){
+  const penaltiesLeft=remainingPenalties();
+
+  if(penaltiesLeft.length>0&&Math.random()<0.15){
+    const p=rand(penaltiesLeft);
+    game.ownedPenalties.add(p.id);
+    p.apply();
+    game.penaltyText=p.name+"\n"+p.desc;
+    game.penaltyOpen=true;
+    game.penaltyTimer=0;
+    return;
+  }
+
+  const pool=remainingCards();
+
+  if(pool.length===0){
+    game.hp=Math.min(game.maxHp,game.hp+game.maxHp*0.3);
+    addText("회복",player.x,player.y-30,"lime");
+    return;
+  }
+
+  const temp=[...pool];
+  game.cardChoices=[];
+  const count=Math.min(3,temp.length);
+
+  for(let i=0;i<count;i++){
+    const c=pickCard(temp);
+    game.cardChoices.push(c);
+    temp.splice(temp.indexOf(c),1);
+  }
+
+  game.cardOpen=true;
+  game.cardTimer=0;
+}
+
+function selectCard(index){
+  const c=game.cardChoices[index];
+  if(!c)return;
+
+  game.ownedCards.add(c.id);
+  c.apply();
+
+  game.cardOpen=false;
+  game.cardChoices=[];
+}
+
+function updateCards(dt){
+  if(game.penaltyOpen){
+    game.penaltyTimer+=dt;
+
+    if(game.penaltyTimer>=CFG.penaltyShowTime){
+      game.penaltyOpen=false;
+      game.penaltyText="";
+    }
+
+    return;
+  }
+
+  if(game.cardOpen){
+    game.cardTimer+=dt;
+
+    if(game.cardTimer>=CFG.cardSelectTime){
+      selectCard(Math.floor(Math.random()*game.cardChoices.length));
+    }
+
+    return;
+  }
+
+  if(game.time>=game.nextCardTime){
+    game.nextCardTime+=CFG.cardInterval;
+    openCardEvent();
+  }
+}
+
+function handleCardClick(x,y){
+  if(!game.cardOpen)return;
+
+  const n=game.cardChoices.length;
+  const cardW=120,cardH=220,gap=15;
+  const total=n*cardW+(n-1)*gap;
+  const start=(W-total)/2;
+  const y0=310;
+
+  for(let i=0;i<n;i++){
+    const cx=start+i*(cardW+gap);
+
+    if(x>=cx&&x<=cx+cardW&&y>=y0&&y<=y0+cardH){
+      selectCard(i);
+      return;
+    }
+  }
+}
+
+function handleRestartClick(x,y){
+  if(x>=W/2-90&&x<=W/2+90&&y>=H/2+130&&y<=H/2+185){
+    resetGame();
+  }
+}
+
+function drawArena(){
+  ctx.save();
+  ctx.shadowColor="#00aaff";
+  ctx.shadowBlur=18;
+  ctx.strokeStyle="#33ccff";
+  ctx.lineWidth=5;
+  ctx.strokeRect(left(),topY(),arena.w,arena.h);
+  ctx.restore();
+}
+
+function drawBullets(){
+  for(const b of game.bullets){
+    ctx.save();
+    ctx.shadowColor=b.color;
+    ctx.shadowBlur=14;
+    ctx.beginPath();
+    ctx.arc(b.x,b.y,b.r,0,Math.PI*2);
+    ctx.fillStyle=b.color;
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawPlayer(){
+  ctx.save();
+  ctx.globalAlpha=game.dodgeFade>0?0.45:1;
+  ctx.shadowColor="white";
+  ctx.shadowBlur=18;
+  ctx.beginPath();
+  ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
+  ctx.fillStyle="white";
+  ctx.fill();
+  ctx.restore();
+
+  if(game.invincible>0){
+    ctx.save();
+    ctx.shadowColor="white";
+    ctx.shadowBlur=15;
+    ctx.beginPath();
+    ctx.arc(player.x,player.y,player.r+8,0,Math.PI*2);
+    ctx.strokeStyle="white";
+    ctx.lineWidth=2;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawEffects(){
+  for(const w of game.warnings){
+    ctx.save();
+    ctx.globalAlpha=Math.max(w.life/w.max,0)*0.7;
+    ctx.shadowColor="red";
+    ctx.shadowBlur=12;
+    ctx.strokeStyle="red";
+    ctx.lineWidth=3;
+
+    if(w.type==="circle"){
+      ctx.beginPath();
+      ctx.arc(w.x,w.y,w.r,0,Math.PI*2);
+      ctx.stroke();
+    }
+
+    if(w.type==="line"){
+      ctx.beginPath();
+      ctx.moveTo(w.x-Math.cos(w.a)*500,w.y-Math.sin(w.a)*500);
+      ctx.lineTo(w.x+Math.cos(w.a)*500,w.y+Math.sin(w.a)*500);
+      ctx.stroke();
+    }
+
+    if(w.type==="cross"){
+      ctx.beginPath();
+      ctx.moveTo(w.x-500,w.y);
+      ctx.lineTo(w.x+500,w.y);
+      ctx.moveTo(w.x,w.y-500);
+      ctx.lineTo(w.x,w.y+500);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  for(const f of game.texts){
+    ctx.save();
+    ctx.globalAlpha=Math.max(f.life/f.max,0);
+    ctx.shadowColor=f.color;
+    ctx.shadowBlur=10;
+    ctx.fillStyle=f.color;
+    ctx.font="13px Arial";
+    ctx.textAlign="center";
+    ctx.fillText(f.text,f.x,f.y);
+    ctx.restore();
+  }
+}
+
+function getHpColor(){
+  const ratio=game.hp/game.maxHp;
+  if(ratio>0.6)return "lime";
+  if(ratio>0.3)return "#FFD700";
+  return "#ff3333";
+}
+
+function drawUI(){
+  const hpX=65,hpY=22,hpW=320,hpH=24;
+  const hpColor=getHpColor();
+
+  ctx.fillStyle="#222";
+  ctx.fillRect(hpX,hpY,hpW,hpH);
+
+  ctx.save();
+  ctx.shadowColor=hpColor;
+  ctx.shadowBlur=14;
+  ctx.fillStyle=hpColor;
+  ctx.fillRect(hpX,hpY,hpW*clamp(game.hp/game.maxHp,0,1),hpH);
+  ctx.restore();
+
+  ctx.strokeStyle="white";
+  ctx.lineWidth=2;
+  ctx.strokeRect(hpX,hpY,hpW,hpH);
+
+  ctx.strokeStyle="rgba(255,255,255,0.75)";
+  ctx.lineWidth=1;
+
+  for(let i=1;i<=5;i++){
+    ctx.beginPath();
+    ctx.moveTo(hpX+hpW/5*i,hpY);
+    ctx.lineTo(hpX+hpW/5*i,hpY+hpH);
+    ctx.stroke();
+  }
+
+  ctx.save();
+  ctx.shadowColor="white";
+  ctx.shadowBlur=8;
+  ctx.fillStyle="white";
+  ctx.font="26px Arial";
+  ctx.textAlign="center";
+  ctx.fillText(fmt(game.time),W/2,82);
+  ctx.restore();
+}
+
+function rarityColor(rarity){
+  if(rarity==="common")return "#D9D9D9";
+  if(rarity==="rare")return "#87CEEB";
+  if(rarity==="epic")return "#C8A2FF";
+  if(rarity==="legendary")return "#FFD700";
+  return "white";
+}
+
+function drawCards(){
+  if(game.penaltyOpen){
+    ctx.fillStyle="rgba(0,0,0,0.82)";
+    ctx.fillRect(0,0,W,H);
+
+    ctx.save();
+    ctx.shadowColor="red";
+    ctx.shadowBlur=15;
+    ctx.fillStyle="red";
+    ctx.font="42px Arial";
+    ctx.textAlign="center";
+    ctx.fillText("패널티!",W/2,330);
+    ctx.restore();
+
+    ctx.fillStyle="white";
+    ctx.font="28px Arial";
+    ctx.textAlign="center";
+
+    const lines=game.penaltyText.split("\n");
+    for(let i=0;i<lines.length;i++){
+      ctx.fillText(lines[i],W/2,390+i*42);
+    }
+  }
+
+  if(game.cardOpen){
+    ctx.fillStyle="rgba(0,0,0,0.82)";
+    ctx.fillRect(0,0,W,H);
+
+    ctx.save();
+    ctx.shadowColor="white";
+    ctx.shadowBlur=10;
+    ctx.fillStyle="white";
+    ctx.font="34px Arial";
+    ctx.textAlign="center";
+    ctx.fillText("카드 선택",W/2,190);
+    ctx.restore();
+
+    ctx.font="22px Arial";
+    ctx.fillStyle="white";
+    ctx.textAlign="center";
+    ctx.fillText(Math.ceil(CFG.cardSelectTime-game.cardTimer)+"초",W/2,235);
+
+    const n=game.cardChoices.length;
+    const cardW=120,cardH=220,gap=15;
+    const total=n*cardW+(n-1)*gap;
+    const start=(W-total)/2;
+    const y=310;
+
+    for(let i=0;i<n;i++){
+      const c=game.cardChoices[i];
+      const x=start+i*(cardW+gap);
+      const color=rarityColor(c.rarity);
+
+      ctx.save();
+      ctx.shadowColor=color;
+      ctx.shadowBlur=16;
+      ctx.fillStyle=color;
+      ctx.fillRect(x,y,cardW,cardH);
+      ctx.restore();
+
+      ctx.strokeStyle="white";
+      ctx.lineWidth=3;
+      ctx.strokeRect(x,y,cardW,cardH);
+
+      ctx.fillStyle="black";
+      ctx.textAlign="center";
+
+      ctx.font="14px Arial";
+      ctx.fillText(c.rarity.toUpperCase(),x+cardW/2,y+30);
+
+      ctx.font="17px Arial";
+      ctx.fillText(c.name,x+cardW/2,y+75);
+
+      ctx.font="13px Arial";
+
+      const words=c.desc.split(" ");
+      let line="";
+      let yy=y+120;
+
+      for(const word of words){
+        if((line+word).length>9){
+          ctx.fillText(line,x+cardW/2,yy);
+          yy+=22;
+          line=word+" ";
+        }else{
+          line+=word+" ";
+        }
+      }
+
+      ctx.fillText(line,x+cardW/2,yy);
+    }
+  }
+
+  if(game.gameOver){
+    ctx.fillStyle="rgba(0,0,0,0.85)";
+    ctx.fillRect(0,0,W,H);
+
+    ctx.save();
+    ctx.shadowColor="red";
+    ctx.shadowBlur=18;
+    ctx.fillStyle="red";
+    ctx.font="58px Arial";
+    ctx.textAlign="center";
+    ctx.fillText("GAME OVER",W/2,H/2-90);
+    ctx.restore();
+
+    if(game.newRecord){
+      ctx.save();
+      ctx.shadowColor="#FFD700";
+      ctx.shadowBlur=14;
+      ctx.fillStyle="#FFD700";
+      ctx.font="28px Arial";
+      ctx.textAlign="center";
+      ctx.fillText("NEW RECORD!",W/2,H/2-45);
+      ctx.restore();
+    }
+
+    ctx.fillStyle="white";
+    ctx.font="26px Arial";
+    ctx.textAlign="center";
+    ctx.fillText("생존 시간",W/2,H/2+5);
+
+    ctx.font="36px Arial";
+    ctx.fillText(fmt(game.time),W/2,H/2+50);
+
+    ctx.font="24px Arial";
+    ctx.fillText("BEST "+fmt(game.best),W/2,H/2+95);
+
+    ctx.strokeStyle="white";
+    ctx.lineWidth=2;
+    ctx.strokeRect(W/2-90,H/2+130,180,55);
+
+    ctx.fillText("다시 시작",W/2,H/2+166);
+  }
+}
+
+function update(dt){
+  if(!game.started){
+    if(!game.showStart){
+      game.countdownTimer+=dt;
+
+      if(game.countdownTimer>=1){
+        game.countdownTimer=0;
+        game.countdown--;
+
+        if(game.countdown<=0){
+          game.showStart=true;
+          game.startTimer=0;
+        }
+      }
+    }else{
+      game.startTimer+=dt;
+
+      if(game.startTimer>=0.7){
+        game.started=true;
+      }
+    }
+
+    return;
+  }
+
+  if(game.gameOver)return;
+
+  if(game.cardOpen||game.penaltyOpen){
+    updateCards(dt);
+    return;
+  }
+
+  game.time+=dt;
+
+  updateInput();
+  updatePlayer(dt);
+  updateAttacks(dt);
+  updateSpecials(dt);
+  updateBullets(dt);
+  updateEffects(dt);
+  updateCards(dt);
+  updateRules(dt);
+}
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+
+  drawArena();
+  drawBullets();
+  drawEffects();
+  drawPlayer();
+  drawUI();
+  drawCards();
+
+  if(!game.started){
+    ctx.save();
+    ctx.shadowColor="white";
+    ctx.shadowBlur=15;
+    ctx.fillStyle="white";
+    ctx.textAlign="center";
+
+    if(game.showStart){
+      ctx.font="60px Arial";
+      ctx.fillText("START!",W/2,H/2);
+    }else{
+      ctx.font="90px Arial";
+      ctx.fillText(game.countdown,W/2,H/2);
+    }
+
+    ctx.restore();
+  }
+}
+
+function loop(timestamp){
+  if(!game.last)game.last=timestamp;
+
+  const dt=Math.min((timestamp-game.last)/1000,0.05);
+  game.last=timestamp;
+
+  update(dt);
+  render();
+
+  requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
