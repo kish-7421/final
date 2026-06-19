@@ -192,6 +192,9 @@ function updateSwipeInput(){
   let dx=swipe.currentX-swipe.startX;
   let dy=swipe.currentY-swipe.startY;
 
+  swipe.startX=swipe.currentX;
+  swipe.startY=swipe.currentY;
+
   dx=clamp(dx/60,-1,1);
   dy=clamp(dy/60,-1,1);
 
