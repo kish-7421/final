@@ -6,7 +6,14 @@
 <title>Ultimate Survival</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-html,body{width:100%;height:100%;overflow:hidden;background:black;touch-action:none;font-family:Arial,sans-serif;}
+html,body{
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  background:black;
+  touch-action:none;
+  font-family:Arial,sans-serif;
+}
 
 canvas{
   display:block;
@@ -34,7 +41,7 @@ const W=450,H=900;
 const CFG={
   startHp:160,
   playerR:10,
-  playerSpeed:280,
+  playerSpeed:290,
   arenaW:300,
   arenaH:680,
   normalDamage:10,
@@ -51,26 +58,83 @@ const CFG={
 };
 
 const game={
-  started:false,gameOver:false,
-  countdown:3,countdownTimer:0,showStart:false,startTimer:0,
-  time:0,last:0,
-  hp:CFG.startHp,maxHp:CFG.startHp,
-  regen:0,dodge:0,damageReduce:0,bulletBonus:0,bulletSlow:0,
-  hasRevive:false,reviveUsed:false,invincible:0,dodgeFade:0,
-  bullets:[],texts:[],warnings:[],delayed:[],
-  activeAttacks:[],attackScheduleIndex:0,specialTimer:0,lastSpecial:null,
-  nextCardTime:CFG.cardInterval,cardOpen:false,cardTimer:0,cardChoices:[],
-  penaltyOpen:false,penaltyTimer:0,penaltyText:"",
-  ownedCards:new Set(),ownedPenalties:new Set(),
+  started:false,
+  gameOver:false,
+
+  countdown:3,
+  countdownTimer:0,
+  showStart:false,
+  startTimer:0,
+
+  time:0,
+  last:0,
+
+  hp:CFG.startHp,
+  maxHp:CFG.startHp,
+
+  regen:0,
+  dodge:0,
+  damageReduce:0,
+  bulletBonus:0,
+  bulletSlow:0,
+
+  hasRevive:false,
+  reviveUsed:false,
+  invincible:0,
+  dodgeFade:0,
+
+  bullets:[],
+  texts:[],
+  warnings:[],
+  delayed:[],
+
+  activeAttacks:[],
+  attackScheduleIndex:0,
+
+  specialTimer:0,
+  lastSpecial:null,
+
+  nextCardTime:CFG.cardInterval,
+  cardOpen:false,
+  cardTimer:0,
+  cardChoices:[],
+
+  penaltyOpen:false,
+  penaltyTimer:0,
+  penaltyText:"",
+
+  ownedCards:new Set(),
+  ownedPenalties:new Set(),
+
   best:Number(localStorage.getItem("ultimate_survival_best")||0),
   newRecord:false
 };
 
-const player={x:W/2,y:H/2,r:CFG.playerR,speed:CFG.playerSpeed};
-const arena={x:W/2,y:H/2,w:CFG.arenaW,h:CFG.arenaH};
+const player={
+  x:W/2,
+  y:H/2,
+  r:CFG.playerR,
+  speed:CFG.playerSpeed
+};
 
-const keys={up:false,down:false,left:false,right:false};
-const input={dx:0,dy:0};
+const arena={
+  x:W/2,
+  y:H/2,
+  w:CFG.arenaW,
+  h:CFG.arenaH
+};
+
+const keys={
+  up:false,
+  down:false,
+  left:false,
+  right:false
+};
+
+const input={
+  dx:0,
+  dy:0
+};
 
 const swipe={
   active:false,
@@ -81,14 +145,38 @@ const swipe={
   currentY:0
 };
 
-function left(){return arena.x-arena.w/2;}
-function right(){return arena.x+arena.w/2;}
-function topY(){return arena.y-arena.h/2;}
-function bottom(){return arena.y+arena.h/2;}
-function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
-function distance(x1,y1,x2,y2){return Math.hypot(x1-x2,y1-y2);}
-function fmt(t){t=Math.floor(t);return String(Math.floor(t/60)).padStart(2,"0")+":"+String(t%60).padStart(2,"0");}
-function rand(arr){return arr[Math.floor(Math.random()*arr.length)];}
+function left(){
+  return arena.x-arena.w/2;
+}
+
+function right(){
+  return arena.x+arena.w/2;
+}
+
+function topY(){
+  return arena.y-arena.h/2;
+}
+
+function bottom(){
+  return arena.y+arena.h/2;
+}
+
+function clamp(v,a,b){
+  return Math.max(a,Math.min(b,v));
+}
+
+function distance(x1,y1,x2,y2){
+  return Math.hypot(x1-x2,y1-y2);
+}
+
+function fmt(t){
+  t=Math.floor(t);
+  return String(Math.floor(t/60)).padStart(2,"0")+":"+String(t%60).padStart(2,"0");
+}
+
+function rand(arr){
+  return arr[Math.floor(Math.random()*arr.length)];
+}
 
 function getPointer(e){
   const rect=canvas.getBoundingClientRect();
@@ -126,20 +214,60 @@ function stopSwipe(){
 }
 
 function resetGame(){
-  game.started=false;game.gameOver=false;
-  game.countdown=3;game.countdownTimer=0;game.showStart=false;game.startTimer=0;
-  game.time=0;game.last=0;
-  game.hp=CFG.startHp;game.maxHp=CFG.startHp;
-  game.regen=0;game.dodge=0;game.damageReduce=0;game.bulletBonus=0;game.bulletSlow=0;
-  game.hasRevive=false;game.reviveUsed=false;game.invincible=0;game.dodgeFade=0;
-  game.bullets.length=0;game.texts.length=0;game.warnings.length=0;game.delayed.length=0;
-  game.activeAttacks=[];game.attackScheduleIndex=0;game.specialTimer=0;game.lastSpecial=null;
-  game.nextCardTime=CFG.cardInterval;game.cardOpen=false;game.cardTimer=0;game.cardChoices=[];
-  game.penaltyOpen=false;game.penaltyTimer=0;game.penaltyText="";
-  game.ownedCards.clear();game.ownedPenalties.clear();
+  game.started=false;
+  game.gameOver=false;
+
+  game.countdown=3;
+  game.countdownTimer=0;
+  game.showStart=false;
+  game.startTimer=0;
+
+  game.time=0;
+  game.last=0;
+
+  game.hp=CFG.startHp;
+  game.maxHp=CFG.startHp;
+
+  game.regen=0;
+  game.dodge=0;
+  game.damageReduce=0;
+  game.bulletBonus=0;
+  game.bulletSlow=0;
+
+  game.hasRevive=false;
+  game.reviveUsed=false;
+  game.invincible=0;
+  game.dodgeFade=0;
+
+  game.bullets.length=0;
+  game.texts.length=0;
+  game.warnings.length=0;
+  game.delayed.length=0;
+
+  game.activeAttacks=[];
+  game.attackScheduleIndex=0;
+
+  game.specialTimer=0;
+  game.lastSpecial=null;
+
+  game.nextCardTime=CFG.cardInterval;
+  game.cardOpen=false;
+  game.cardTimer=0;
+  game.cardChoices=[];
+
+  game.penaltyOpen=false;
+  game.penaltyTimer=0;
+  game.penaltyText="";
+
+  game.ownedCards.clear();
+  game.ownedPenalties.clear();
+
   game.best=Number(localStorage.getItem("ultimate_survival_best")||0);
   game.newRecord=false;
-  player.x=W/2;player.y=H/2;
+
+  player.x=W/2;
+  player.y=H/2;
+
   stopSwipe();
 }
 
@@ -160,9 +288,22 @@ window.addEventListener("keyup",e=>{
 canvas.addEventListener("touchstart",e=>{
   const p=getPointer(e);
 
-  if(game.gameOver){handleRestartClick(p.x,p.y);e.preventDefault();return;}
-  if(game.cardOpen){handleCardClick(p.x,p.y);e.preventDefault();return;}
-  if(game.penaltyOpen){e.preventDefault();return;}
+  if(game.gameOver){
+    handleRestartClick(p.x,p.y);
+    e.preventDefault();
+    return;
+  }
+
+  if(game.cardOpen){
+    handleCardClick(p.x,p.y);
+    e.preventDefault();
+    return;
+  }
+
+  if(game.penaltyOpen){
+    e.preventDefault();
+    return;
+  }
 
   const t=e.changedTouches[0];
 
@@ -212,17 +353,33 @@ canvas.addEventListener("touchcancel",e=>{
 
 canvas.addEventListener("click",e=>{
   const p=getPointer(e);
-  if(game.gameOver)handleRestartClick(p.x,p.y);
-  if(game.cardOpen)handleCardClick(p.x,p.y);
+
+  if(game.gameOver){
+    handleRestartClick(p.x,p.y);
+  }
+
+  if(game.cardOpen){
+    handleCardClick(p.x,p.y);
+  }
 });
 
 function addText(text,x,y,color="white"){
-  game.texts.push({text,x,y,color,life:0.6,max:0.6});
+  game.texts.push({
+    text:text,
+    x:x,
+    y:y,
+    color:color,
+    life:0.6,
+    max:0.6
+  });
 }
 
 function createBullet(o){
   game.bullets.push({
-    x:o.x,y:o.y,vx:o.vx,vy:o.vy,
+    x:o.x,
+    y:o.y,
+    vx:o.vx,
+    vy:o.vy,
     r:o.r||(o.type==="special"?CFG.specialR:CFG.normalR),
     damage:o.damage||(o.type==="special"?CFG.specialDamage:CFG.normalDamage),
     type:o.type||"normal",
@@ -230,7 +387,9 @@ function createBullet(o){
     life:o.life??null
   });
 
-  while(game.bullets.length>CFG.maxBullets)game.bullets.shift();
+  while(game.bullets.length>CFG.maxBullets){
+    game.bullets.shift();
+  }
 }
 
 function bulletSpeedMultiplier(){
@@ -247,12 +406,19 @@ function damagePlayer(amount,ignoreReduction=false){
       addText("회피",player.x+18,player.y-18,"white");
       return;
     }
+
     amount*=1-game.damageReduce;
   }
 
   game.hp-=amount;
-  if(game.hp<0)game.hp=0;
-  if(game.hp<=0)handleDeath();
+
+  if(game.hp<0){
+    game.hp=0;
+  }
+
+  if(game.hp<=0){
+    handleDeath();
+  }
 }
 
 function handleDeath(){
@@ -276,7 +442,8 @@ function handleDeath(){
 function updateInput(){
   if(swipe.active)return;
 
-  let x=0,y=0;
+  let x=0;
+  let y=0;
 
   if(keys.left)x--;
   if(keys.right)x++;
@@ -310,6 +477,7 @@ function updateBullets(dt){
 
     if(b.life!==null){
       b.life-=dt;
+
       if(b.life<=0){
         game.bullets.splice(i,1);
         continue;
@@ -336,85 +504,158 @@ function updateEffects(dt){
     const f=game.texts[i];
     f.life-=dt;
     f.y-=20*dt;
-    if(f.life<=0)game.texts.splice(i,1);
+
+    if(f.life<=0){
+      game.texts.splice(i,1);
+    }
   }
 
   for(let i=game.warnings.length-1;i>=0;i--){
     const w=game.warnings[i];
     w.life-=dt;
-    if(w.life<=0)game.warnings.splice(i,1);
+
+    if(w.life<=0){
+      game.warnings.splice(i,1);
+    }
   }
 
   for(let i=game.delayed.length-1;i>=0;i--){
     const ev=game.delayed[i];
     ev.time-=dt;
+
     if(ev.time<=0){
       ev.fn();
       game.delayed.splice(i,1);
     }
   }
 
-  if(game.invincible>0)game.invincible=Math.max(0,game.invincible-dt);
-  if(game.dodgeFade>0)game.dodgeFade=Math.max(0,game.dodgeFade-dt);
+  if(game.invincible>0){
+    game.invincible=Math.max(0,game.invincible-dt);
+  }
+
+  if(game.dodgeFade>0){
+    game.dodgeFade=Math.max(0,game.dodgeFade-dt);
+  }
 }
 
 function updateRules(dt){
   if(game.regen>0){
-    game.hp=Math.min(game.maxHp,game.hp+game.maxHp*game.regen*dt);
+    game.hp=Math.min(
+      game.maxHp,
+      game.hp+game.maxHp*game.regen*dt
+    );
   }
 }
 
 function shootAngle(x,y,a,s,type="normal",r=null){
-  createBullet({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,type,r});
+  createBullet({
+    x:x,
+    y:y,
+    vx:Math.cos(a)*s,
+    vy:Math.sin(a)*s,
+    type:type,
+    r:r
+  });
 }
 
 function shootAt(x,y,tx,ty,s,type="normal",r=null){
-  const dx=tx-x,dy=ty-y,d=Math.hypot(dx,dy)||1;
-  createBullet({x,y,vx:dx/d*s,vy:dy/d*s,type,r});
+  const dx=tx-x;
+  const dy=ty-y;
+  const d=Math.hypot(dx,dy)||1;
+
+  createBullet({
+    x:x,
+    y:y,
+    vx:dx/d*s,
+    vy:dy/d*s,
+    type:type,
+    r:r
+  });
 }
 
-const attackIds=["A1","A2","A3","A4","A5","A6","A7","A8","A9","A10"];
-const attackCooldown={A1:0.8,A2:1.2,A3:1.8,A4:1.5,A5:1.5,A6:2.0,A7:3.0,A8:2.5,A9:2.0,A10:1.0};
-const attackTimer={A1:0,A2:0,A3:0,A4:0,A5:0,A6:0,A7:0,A8:0,A9:0,A10:0};
+const attackIds=[
+  "A1","A2","A3","A4","A5",
+  "A6","A7","A8","A9","A10"
+];
+
+const attackCooldown={
+  A1:0.8,
+  A2:1.2,
+  A3:1.8,
+  A4:1.5,
+  A5:1.5,
+  A6:2.0,
+  A7:3.0,
+  A8:2.5,
+  A9:2.0,
+  A10:1.0
+};
+
+const attackTimer={
+  A1:0,A2:0,A3:0,A4:0,A5:0,
+  A6:0,A7:0,A8:0,A9:0,A10:0
+};
+
 const attackSchedule=[
-  {time:2,count:3},
+  {time:2,count:2},
   {time:30,count:2},
   {time:60,count:2},
   {time:90,count:2},
-  {time:120,count:1}
+  {time:120,count:2}
 ];
 
 const attacks={
   A1(){
-    const s=230, side=Math.floor(Math.random()*4);
-    if(side===0)shootAt(left()-20,player.y,player.x,player.y,s);
-    else if(side===1)shootAt(right()+20,player.y,player.x,player.y,s);
-    else if(side===2)shootAt(player.x,topY()-20,player.x,player.y,s);
-    else shootAt(player.x,bottom()+20,player.x,player.y,s);
+    const s=230;
+    const side=Math.floor(Math.random()*4);
+
+    if(side===0){
+      shootAt(left()-20,player.y,player.x,player.y,s);
+    }else if(side===1){
+      shootAt(right()+20,player.y,player.x,player.y,s);
+    }else if(side===2){
+      shootAt(player.x,topY()-20,player.x,player.y,s);
+    }else{
+      shootAt(player.x,bottom()+20,player.x,player.y,s);
+    }
   },
 
   A2(){
-    const x=left()-20,y=topY()+Math.random()*arena.h;
+    const x=left()-20;
+    const y=topY()+Math.random()*arena.h;
     const base=Math.atan2(player.y-y,player.x-x);
-    for(let i=-1;i<=1;i++)shootAngle(x,y,base+i*0.18,210);
+
+    for(let i=-1;i<=1;i++){
+      shootAngle(x,y,base+i*0.18,210);
+    }
   },
 
   A3(){
-    const x=right()+20,y=topY()+Math.random()*arena.h;
+    const x=right()+20;
+    const y=topY()+Math.random()*arena.h;
     const base=Math.atan2(player.y-y,player.x-x);
-    for(let i=-2;i<=2;i++)shootAngle(x,y,base+i*0.16,200);
+
+    for(let i=-2;i<=2;i++){
+      shootAngle(x,y,base+i*0.16,200);
+    }
   },
 
   A4(){
-    for(const a of [0,Math.PI,Math.PI/2,Math.PI*1.5])shootAngle(arena.x,arena.y,a,210);
+    for(const a of [0,Math.PI,Math.PI/2,Math.PI*1.5]){
+      shootAngle(arena.x,arena.y,a,210);
+    }
   },
 
   A5(){
-    for(const a of [Math.PI/4,Math.PI*3/4,Math.PI*5/4,Math.PI*7/4])shootAngle(arena.x,arena.y,a,210);
+    for(const a of [Math.PI/4,Math.PI*3/4,Math.PI*5/4,Math.PI*7/4]){
+      shootAngle(arena.x,arena.y,a,210);
+    }
   },
 
   A6(){
-    for(let i=0;i<8;i++)shootAngle(arena.x,arena.y,Math.PI*2/8*i,190);
+    for(let i=0;i<8;i++){
+      shootAngle(arena.x,arena.y,Math.PI*2/8*i,190);
+    }
   },
 
   A7(){
@@ -431,10 +672,14 @@ const attacks={
 
     for(let i=0;i<7;i++){
       if(i===gap||i===gap+1)continue;
+
       const y=topY()+70+i*100;
 
-      if(fromLeft)createBullet({x:left()-25,y,vx:180,vy:0,r:9});
-      else createBullet({x:right()+25,y,vx:-180,vy:0,r:9});
+      if(fromLeft){
+        createBullet({x:left()-25,y:y,vx:180,vy:0,r:CFG.normalR});
+      }else{
+        createBullet({x:right()+25,y:y,vx:-180,vy:0,r:CFG.normalR});
+      }
     }
   },
 
@@ -454,6 +699,7 @@ const attacks={
     const fromLeft=Math.random()<0.5;
     const x=fromLeft?left()-25:right()+25;
     const y=topY()+Math.random()*arena.h;
+
     shootAt(x,y,player.x,player.y,260);
   }
 };
@@ -480,6 +726,7 @@ function updateAttacks(dt){
 
   for(const id of game.activeAttacks){
     attackTimer[id]+=dt;
+
     if(attackTimer[id]>=attackCooldown[id]){
       attackTimer[id]=0;
       attacks[id]();
@@ -488,13 +735,19 @@ function updateAttacks(dt){
 }
 
 function addWarning(type,data){
-  game.warnings.push({type,...data,life:1.5,max:1.5});
+  game.warnings.push({
+    type:type,
+    ...data,
+    life:1.5,
+    max:1.5
+  });
 }
 
 const specials={
   S1(){
     const a=Math.random()*Math.PI*2;
-    addWarning("line",{x:arena.x,y:arena.y,a});
+
+    addWarning("line",{x:arena.x,y:arena.y,a:a});
 
     game.delayed.push({
       time:1.5,
@@ -503,7 +756,11 @@ const specials={
           createBullet({
             x:arena.x+Math.cos(a)*i*22,
             y:arena.y+Math.sin(a)*i*22,
-            vx:0,vy:0,type:"special",r:CFG.specialR,life:0.35
+            vx:0,
+            vy:0,
+            type:"special",
+            r:CFG.specialR,
+            life:0.35
           });
         }
       }
@@ -516,7 +773,9 @@ const specials={
     game.delayed.push({
       time:1.5,
       fn(){
-        for(let i=0;i<24;i++)shootAngle(arena.x,arena.y,Math.PI*2/24*i,250,"special");
+        for(let i=0;i<24;i++){
+          shootAngle(arena.x,arena.y,Math.PI*2/24*i,250,"special");
+        }
       }
     });
   },
@@ -559,7 +818,9 @@ const specials={
       game.delayed.push({
         time:1.5+k*0.4,
         fn(){
-          for(let i=0;i<14;i++)shootAngle(arena.x,arena.y,Math.PI*2/14*i,230,"special");
+          for(let i=0;i<14;i++){
+            shootAngle(arena.x,arena.y,Math.PI*2/14*i,230,"special");
+          }
         }
       });
     }
@@ -573,7 +834,7 @@ const specials={
         time:1.5+k*0.4,
         fn(){
           for(const a of [0,Math.PI,Math.PI/2,Math.PI*1.5]){
-            shootAngle(arena.x,arena.y,a,280,"special",13);
+            shootAngle(arena.x,arena.y,a,280,"special",CFG.specialR);
           }
         }
       });
@@ -586,7 +847,9 @@ const specials={
     game.delayed.push({
       time:1.5,
       fn(){
-        for(let i=0;i<8;i++)shootAngle(arena.x,arena.y,Math.PI*2/8*i,320,"special",15);
+        for(let i=0;i<8;i++){
+          shootAngle(arena.x,arena.y,Math.PI*2/8*i,320,"special",CFG.specialR);
+        }
       }
     });
   }
@@ -594,12 +857,14 @@ const specials={
 
 function updateSpecials(dt){
   game.specialTimer+=dt;
+
   if(game.specialTimer<CFG.specialInterval)return;
 
   game.specialTimer=0;
 
   const ids=Object.keys(specials).filter(id=>id!==game.lastSpecial);
   const id=rand(ids);
+
   game.lastSpecial=id;
   specials[id]();
 }
@@ -608,15 +873,19 @@ const cardData=[
   {id:"C1",rarity:"common",name:"최대체력 I",desc:"최대 HP +20",apply(){game.maxHp+=20;game.hp+=20;}},
   {id:"C2",rarity:"rare",name:"최대체력 II",desc:"최대 HP +40",apply(){game.maxHp+=40;game.hp+=40;}},
   {id:"C3",rarity:"epic",name:"최대체력 III",desc:"최대 HP +60",apply(){game.maxHp+=60;game.hp+=60;}},
+
   {id:"C4",rarity:"common",name:"재생 I",desc:"초당 최대 HP 0.5% 회복",apply(){game.regen+=0.005;}},
   {id:"C5",rarity:"rare",name:"재생 II",desc:"초당 최대 HP 0.8% 회복",apply(){game.regen+=0.008;}},
   {id:"C6",rarity:"epic",name:"재생 III",desc:"초당 최대 HP 1.3% 회복",apply(){game.regen+=0.013;}},
+
   {id:"C7",rarity:"common",name:"회피 I",desc:"회피 확률 +2%",apply(){game.dodge+=0.02;}},
   {id:"C8",rarity:"rare",name:"회피 II",desc:"회피 확률 +5%",apply(){game.dodge+=0.05;}},
   {id:"C9",rarity:"epic",name:"회피 III",desc:"회피 확률 +8%",apply(){game.dodge+=0.08;}},
+
   {id:"C10",rarity:"common",name:"피해감소 I",desc:"받는 피해 5% 감소",apply(){game.damageReduce+=0.05;}},
   {id:"C11",rarity:"rare",name:"피해감소 II",desc:"받는 피해 10% 감소",apply(){game.damageReduce+=0.10;}},
   {id:"C12",rarity:"epic",name:"피해감소 III",desc:"받는 피해 15% 감소",apply(){game.damageReduce+=0.15;}},
+
   {id:"C13",rarity:"legendary",name:"대회복",desc:"최대 HP의 75% 회복",apply(){game.hp=Math.min(game.maxHp,game.hp+game.maxHp*0.75);}},
   {id:"C14",rarity:"legendary",name:"부활",desc:"사망 시 1회 부활",apply(){game.hasRevive=true;}}
 ];
@@ -647,7 +916,10 @@ function pickCard(pool){
   let roll=Math.random()*total;
 
   for(const [rarity,weight] of weights){
-    if(roll<weight)return rand(pool.filter(c=>c.rarity===rarity));
+    if(roll<weight){
+      return rand(pool.filter(c=>c.rarity===rarity));
+    }
+
     roll-=weight;
   }
 
@@ -659,11 +931,14 @@ function openCardEvent(){
 
   if(penaltiesLeft.length>0&&Math.random()<0.15){
     const p=rand(penaltiesLeft);
+
     game.ownedPenalties.add(p.id);
     p.apply();
+
     game.penaltyText=p.name+"\n"+p.desc;
     game.penaltyOpen=true;
     game.penaltyTimer=0;
+
     return;
   }
 
@@ -676,7 +951,9 @@ function openCardEvent(){
   }
 
   const temp=[...pool];
+
   game.cardChoices=[];
+
   const count=Math.min(3,temp.length);
 
   for(let i=0;i<count;i++){
@@ -691,6 +968,7 @@ function openCardEvent(){
 
 function selectCard(index){
   const c=game.cardChoices[index];
+
   if(!c)return;
 
   game.ownedCards.add(c.id);
@@ -732,7 +1010,9 @@ function handleCardClick(x,y){
   if(!game.cardOpen)return;
 
   const n=game.cardChoices.length;
-  const cardW=120,cardH=220,gap=15;
+  const cardW=120;
+  const cardH=220;
+  const gap=15;
   const total=n*cardW+(n-1)*gap;
   const start=(W-total)/2;
   const y0=310;
@@ -849,13 +1129,19 @@ function drawEffects(){
 
 function getHpColor(){
   const ratio=game.hp/game.maxHp;
+
   if(ratio>0.6)return "lime";
   if(ratio>0.3)return "#FFD700";
+
   return "#ff3333";
 }
 
 function drawUI(){
-  const hpX=65,hpY=22,hpW=320,hpH=24;
+  const hpX=65;
+  const hpY=22;
+  const hpW=320;
+  const hpH=24;
+
   const hpColor=getHpColor();
 
   ctx.fillStyle="#222";
@@ -897,6 +1183,7 @@ function rarityColor(rarity){
   if(rarity==="rare")return "#87CEEB";
   if(rarity==="epic")return "#C8A2FF";
   if(rarity==="legendary")return "#FFD700";
+
   return "white";
 }
 
@@ -919,6 +1206,7 @@ function drawCards(){
     ctx.textAlign="center";
 
     const lines=game.penaltyText.split("\n");
+
     for(let i=0;i<lines.length;i++){
       ctx.fillText(lines[i],W/2,390+i*42);
     }
@@ -943,7 +1231,9 @@ function drawCards(){
     ctx.fillText(Math.ceil(CFG.cardSelectTime-game.cardTimer)+"초",W/2,235);
 
     const n=game.cardChoices.length;
-    const cardW=120,cardH=220,gap=15;
+    const cardW=120;
+    const cardH=220;
+    const gap=15;
     const total=n*cardW+(n-1)*gap;
     const start=(W-total)/2;
     const y=310;
@@ -1110,9 +1400,12 @@ function render(){
 }
 
 function loop(timestamp){
-  if(!game.last)game.last=timestamp;
+  if(!game.last){
+    game.last=timestamp;
+  }
 
   const dt=Math.min((timestamp-game.last)/1000,0.05);
+
   game.last=timestamp;
 
   update(dt);
@@ -1125,3 +1418,6 @@ requestAnimationFrame(loop);
 </script>
 </body>
 </html>
+'''
+open('/mnt/data/index.html', 'w', encoding='utf-8').write(html)
+print("완료: /mnt/data/index.html")
