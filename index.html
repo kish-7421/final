@@ -50,7 +50,7 @@ const CFG={
   maxBullets:500,
   cardInterval:25,
   cardSelectTime:10,
-  penaltyShowTime:2,
+  penaltyShowTime:5,
   specialInterval:19,
   invincibleTime:2,
   dodgeFadeTime:0.15,
@@ -112,17 +112,8 @@ const arena={
   h:CFG.arenaH
 };
 
-const keys={
-  up:false,
-  down:false,
-  left:false,
-  right:false
-};
-
-const input={
-  dx:0,
-  dy:0
-};
+const keys={up:false,down:false,left:false,right:false};
+const input={dx:0,dy:0};
 
 const drag={
   active:false,
@@ -155,7 +146,6 @@ function rand(arr){
 
 function getPointerFromClient(clientX,clientY){
   const rect=canvas.getBoundingClientRect();
-
   return {
     x:(clientX-rect.left)*canvas.width/rect.width,
     y:(clientY-rect.top)*canvas.height/rect.height
@@ -180,58 +170,44 @@ function stopDrag(){
 function resetGame(){
   game.started=false;
   game.gameOver=false;
-
   game.countdown=3;
   game.countdownTimer=0;
   game.showStart=false;
   game.startTimer=0;
-
   game.time=0;
   game.last=0;
-
   game.hp=CFG.startHp;
   game.maxHp=CFG.startHp;
-
   game.regen=0;
   game.dodge=0;
   game.damageReduce=0;
   game.bulletBonus=0;
   game.bulletSlow=0;
-
   game.hasRevive=false;
   game.reviveUsed=false;
   game.invincible=0;
   game.dodgeFade=0;
-
   game.bullets.length=0;
   game.texts.length=0;
   game.warnings.length=0;
   game.delayed.length=0;
-
   game.activeAttacks=[];
   game.attackScheduleIndex=0;
-
   game.specialTimer=0;
   game.lastSpecial=null;
-
   game.nextCardTime=CFG.cardInterval;
   game.cardOpen=false;
   game.cardTimer=0;
   game.cardChoices=[];
-
   game.penaltyOpen=false;
   game.penaltyTimer=0;
   game.penaltyText="";
-
   game.ownedCards.clear();
   game.ownedPenalties.clear();
-
   game.best=Number(localStorage.getItem("ultimate_survival_best")||0);
   game.newRecord=false;
-
   player.x=W/2;
   player.y=H/2;
-
   stopDrag();
 }
 
@@ -280,20 +256,16 @@ canvas.addEventListener("touchstart",e=>{
 },{passive:false});
 
 canvas.addEventListener("touchmove",e=>{
-  if(!drag.active){
-    return;
-  }
+  if(!drag.active)return;
 
   for(const t of e.changedTouches){
     if(t.identifier===drag.touchId){
       const p=getPointerFromClient(t.clientX,t.clientY);
-
       const dx=p.x-drag.lastX;
       const dy=p.y-drag.lastY;
 
       player.x+=dx*CFG.dragSensitivity;
       player.y+=dy*CFG.dragSensitivity;
-
       clampPlayer();
 
       drag.lastX=p.x;
@@ -310,7 +282,6 @@ canvas.addEventListener("touchend",e=>{
       stopDrag();
     }
   }
-
   e.preventDefault();
 },{passive:false});
 
@@ -321,14 +292,8 @@ canvas.addEventListener("touchcancel",e=>{
 
 canvas.addEventListener("click",e=>{
   const p=getPointer(e);
-
-  if(game.gameOver){
-    handleRestartClick(p.x,p.y);
-  }
-
-  if(game.cardOpen){
-    handleCardClick(p.x,p.y);
-  }
+  if(game.gameOver)handleRestartClick(p.x,p.y);
+  if(game.cardOpen)handleCardClick(p.x,p.y);
 });
 
 function addText(text,x,y,color="white"){
@@ -374,26 +339,20 @@ function damagePlayer(amount,ignoreReduction=false){
       addText("회피",player.x+18,player.y-18,"white");
       return;
     }
-
     amount*=1-game.damageReduce;
   }
 
   game.hp-=amount;
 
-  if(game.hp<0){
-    game.hp=0;
-  }
-
-  if(game.hp<=0){
-    handleDeath();
-  }
+  if(game.hp<0)game.hp=0;
+  if(game.hp<=0)handleDeath();
 }
 
 function handleDeath(){
   if(game.hasRevive&&!game.reviveUsed){
     game.reviveUsed=true;
     game.hasRevive=false;
-    game.hp=game.maxHp*0.3;
+    game.hp=game.maxHp*0.6;
     game.invincible=CFG.invincibleTime;
     return;
   }
@@ -436,7 +395,6 @@ function updateInput(){
 function updatePlayer(dt){
   player.x+=input.dx*player.speed*dt;
   player.y+=input.dy*player.speed*dt;
-
   clampPlayer();
 }
 
@@ -448,7 +406,6 @@ function updateBullets(dt){
 
     if(b.life!==null){
       b.life-=dt;
-
       if(b.life<=0){
         game.bullets.splice(i,1);
         continue;
@@ -475,38 +432,26 @@ function updateEffects(dt){
     const f=game.texts[i];
     f.life-=dt;
     f.y-=20*dt;
-
-    if(f.life<=0){
-      game.texts.splice(i,1);
-    }
+    if(f.life<=0)game.texts.splice(i,1);
   }
 
   for(let i=game.warnings.length-1;i>=0;i--){
     const w=game.warnings[i];
     w.life-=dt;
-
-    if(w.life<=0){
-      game.warnings.splice(i,1);
-    }
+    if(w.life<=0)game.warnings.splice(i,1);
   }
 
   for(let i=game.delayed.length-1;i>=0;i--){
     const ev=game.delayed[i];
     ev.time-=dt;
-
     if(ev.time<=0){
       ev.fn();
       game.delayed.splice(i,1);
     }
   }
 
-  if(game.invincible>0){
-    game.invincible=Math.max(0,game.invincible-dt);
-  }
-
-  if(game.dodgeFade>0){
-    game.dodgeFade=Math.max(0,game.dodgeFade-dt);
-  }
+  if(game.invincible>0)game.invincible=Math.max(0,game.invincible-dt);
+  if(game.dodgeFade>0)game.dodgeFade=Math.max(0,game.dodgeFade-dt);
 }
 
 function updateRules(dt){
@@ -584,15 +529,10 @@ const attacks={
     const s=230;
     const side=Math.floor(Math.random()*4);
 
-    if(side===0){
-      shootAt(left()-20,player.y,player.x,player.y,s);
-    }else if(side===1){
-      shootAt(right()+20,player.y,player.x,player.y,s);
-    }else if(side===2){
-      shootAt(player.x,topY()-20,player.x,player.y,s);
-    }else{
-      shootAt(player.x,bottom()+20,player.x,player.y,s);
-    }
+    if(side===0)shootAt(left()-20,player.y,player.x,player.y,s);
+    else if(side===1)shootAt(right()+20,player.y,player.x,player.y,s);
+    else if(side===2)shootAt(player.x,topY()-20,player.x,player.y,s);
+    else shootAt(player.x,bottom()+20,player.x,player.y,s);
   },
 
   A2(){
@@ -846,29 +786,29 @@ function updateSpecials(dt){
 
 const cardData=[
   {id:"C1",rarity:"common",name:"최대체력 I",desc:"최대 HP +20",apply(){game.maxHp+=20;game.hp+=20;}},
-  {id:"C2",rarity:"rare",name:"최대체력 II",desc:"최대 HP +40",apply(){game.maxHp+=40;game.hp+=40;}},
-  {id:"C3",rarity:"epic",name:"최대체력 III",desc:"최대 HP +60",apply(){game.maxHp+=60;game.hp+=60;}},
+  {id:"C2",rarity:"rare",name:"최대체력 II",desc:"최대 HP +50",apply(){game.maxHp+=50;game.hp+=50;}},
+  {id:"C3",rarity:"epic",name:"최대체력 III",desc:"최대 HP +80",apply(){game.maxHp+=80;game.hp+=80;}},
 
-  {id:"C4",rarity:"common",name:"재생 I",desc:"초당 최대 HP 0.5% 회복",apply(){game.regen+=0.005;}},
-  {id:"C5",rarity:"rare",name:"재생 II",desc:"초당 최대 HP 0.8% 회복",apply(){game.regen+=0.008;}},
-  {id:"C6",rarity:"epic",name:"재생 III",desc:"초당 최대 HP 1.3% 회복",apply(){game.regen+=0.013;}},
+  {id:"C4",rarity:"common",name:"재생 I",desc:"초당 최대 HP 0.6% 회복",apply(){game.regen+=0.006;}},
+  {id:"C5",rarity:"rare",name:"재생 II",desc:"초당 최대 HP 1.1% 회복",apply(){game.regen+=0.011;}},
+  {id:"C6",rarity:"epic",name:"재생 III",desc:"초당 최대 HP 1.8% 회복",apply(){game.regen+=0.018;}},
 
-  {id:"C7",rarity:"common",name:"회피 I",desc:"회피 확률 +2%",apply(){game.dodge+=0.02;}},
-  {id:"C8",rarity:"rare",name:"회피 II",desc:"회피 확률 +5%",apply(){game.dodge+=0.05;}},
-  {id:"C9",rarity:"epic",name:"회피 III",desc:"회피 확률 +8%",apply(){game.dodge+=0.08;}},
+  {id:"C7",rarity:"common",name:"회피 I",desc:"회피 확률 +3%",apply(){game.dodge+=0.03;}},
+  {id:"C8",rarity:"rare",name:"회피 II",desc:"회피 확률 +6%",apply(){game.dodge+=0.06;}},
+  {id:"C9",rarity:"epic",name:"회피 III",desc:"회피 확률 +11%",apply(){game.dodge+=0.11;}},
 
   {id:"C10",rarity:"common",name:"피해감소 I",desc:"받는 피해 5% 감소",apply(){game.damageReduce+=0.05;}},
   {id:"C11",rarity:"rare",name:"피해감소 II",desc:"받는 피해 10% 감소",apply(){game.damageReduce+=0.10;}},
   {id:"C12",rarity:"epic",name:"피해감소 III",desc:"받는 피해 15% 감소",apply(){game.damageReduce+=0.15;}},
 
   {id:"C13",rarity:"legendary",name:"대회복",desc:"최대 HP의 75% 회복",apply(){game.hp=Math.min(game.maxHp,game.hp+game.maxHp*0.75);}},
-  {id:"C14",rarity:"legendary",name:"부활",desc:"사망 시 1회 부활",apply(){game.hasRevive=true;}}
+  {id:"C14",rarity:"legendary",name:"부활",desc:"사망 시 최대 HP의 60%로 부활",apply(){game.hasRevive=true;}}
 ];
 
 const penaltyData=[
-  {id:"P1",name:"탄속 증가 I",desc:"적 탄속 +15%",apply(){game.bulletBonus+=0.15;}},
-  {id:"P2",name:"탄속 증가 II",desc:"적 탄속 +20%",apply(){game.bulletBonus+=0.20;}},
-  {id:"P3",name:"탄속 증가 III",desc:"적 탄속 +30%",apply(){game.bulletBonus+=0.30;}}
+  {id:"P1",name:"탄속 증가 I",desc:"적 탄속 +5%",apply(){game.bulletBonus+=0.05;}},
+  {id:"P2",name:"탄속 증가 II",desc:"적 탄속 +7%",apply(){game.bulletBonus+=0.07;}},
+  {id:"P3",name:"탄속 증가 III",desc:"적 탄속 +10%",apply(){game.bulletBonus+=0.10;}}
 ];
 
 function remainingCards(){
@@ -1057,16 +997,26 @@ function drawPlayer(){
 
 function drawEffects(){
   for(const w of game.warnings){
+    const ratio=Math.max(w.life/w.max,0);
+    const glow=20+Math.sin(performance.now()/80)*8;
+
     ctx.save();
-    ctx.globalAlpha=Math.max(w.life/w.max,0)*0.7;
-    ctx.shadowColor="red";
-    ctx.shadowBlur=12;
-    ctx.strokeStyle="red";
-    ctx.lineWidth=3;
+    ctx.globalAlpha=ratio*0.9;
+    ctx.shadowColor="#ff2222";
+    ctx.shadowBlur=glow;
+    ctx.strokeStyle="#ff3333";
+    ctx.lineWidth=5;
 
     if(w.type==="circle"){
       ctx.beginPath();
       ctx.arc(w.x,w.y,w.r,0,Math.PI*2);
+      ctx.stroke();
+
+      ctx.shadowBlur=glow+15;
+      ctx.lineWidth=2;
+      ctx.strokeStyle="#ff9999";
+      ctx.beginPath();
+      ctx.arc(w.x,w.y,w.r+8,0,Math.PI*2);
       ctx.stroke();
     }
 
@@ -1075,9 +1025,27 @@ function drawEffects(){
       ctx.moveTo(w.x-Math.cos(w.a)*500,w.y-Math.sin(w.a)*500);
       ctx.lineTo(w.x+Math.cos(w.a)*500,w.y+Math.sin(w.a)*500);
       ctx.stroke();
+
+      ctx.shadowBlur=glow+15;
+      ctx.lineWidth=2;
+      ctx.strokeStyle="#ff9999";
+      ctx.beginPath();
+      ctx.moveTo(w.x-Math.cos(w.a)*500,w.y-Math.sin(w.a)*500);
+      ctx.lineTo(w.x+Math.cos(w.a)*500,w.y+Math.sin(w.a)*500);
+      ctx.stroke();
     }
 
     if(w.type==="cross"){
+      ctx.beginPath();
+      ctx.moveTo(w.x-500,w.y);
+      ctx.lineTo(w.x+500,w.y);
+      ctx.moveTo(w.x,w.y-500);
+      ctx.lineTo(w.x,w.y+500);
+      ctx.stroke();
+
+      ctx.shadowBlur=glow+15;
+      ctx.lineWidth=2;
+      ctx.strokeStyle="#ff9999";
       ctx.beginPath();
       ctx.moveTo(w.x-500,w.y);
       ctx.lineTo(w.x+500,w.y);
@@ -1158,32 +1126,48 @@ function rarityColor(rarity){
   if(rarity==="rare")return "#87CEEB";
   if(rarity==="epic")return "#C8A2FF";
   if(rarity==="legendary")return "#FFD700";
-
   return "white";
+}
+
+function rarityGlow(rarity){
+  if(rarity==="common")return 10;
+  if(rarity==="rare")return 18;
+  if(rarity==="epic")return 28;
+  if(rarity==="legendary")return 40;
+  return 10;
 }
 
 function drawCards(){
   if(game.penaltyOpen){
-    ctx.fillStyle="rgba(0,0,0,0.82)";
+    ctx.fillStyle="rgba(0,0,0,0.88)";
     ctx.fillRect(0,0,W,H);
 
     ctx.save();
-    ctx.shadowColor="red";
-    ctx.shadowBlur=15;
-    ctx.fillStyle="red";
+    ctx.shadowColor="#ff0000";
+    ctx.shadowBlur=20;
+    ctx.fillStyle="#660000";
+    ctx.fillRect(W/2-95,310,190,170);
+    ctx.strokeStyle="#aa0000";
+    ctx.lineWidth=4;
+    ctx.strokeRect(W/2-95,310,190,170);
+    ctx.restore();
+
+    ctx.save();
+    ctx.shadowColor="#ff0000";
+    ctx.shadowBlur=20;
+    ctx.fillStyle="#ff2222";
     ctx.font="42px Arial";
     ctx.textAlign="center";
-    ctx.fillText("패널티!",W/2,330);
+    ctx.fillText("패널티!",W/2,350);
     ctx.restore();
 
     ctx.fillStyle="white";
-    ctx.font="28px Arial";
+    ctx.font="24px Arial";
     ctx.textAlign="center";
 
     const lines=game.penaltyText.split("\n");
-
     for(let i=0;i<lines.length;i++){
-      ctx.fillText(lines[i],W/2,390+i*42);
+      ctx.fillText(lines[i],W/2,410+i*38);
     }
   }
 
@@ -1217,17 +1201,22 @@ function drawCards(){
       const c=game.cardChoices[i];
       const x=start+i*(cardW+gap);
       const color=rarityColor(c.rarity);
+      const glow=rarityGlow(c.rarity);
 
       ctx.save();
       ctx.shadowColor=color;
-      ctx.shadowBlur=16;
+      ctx.shadowBlur=glow;
       ctx.fillStyle=color;
       ctx.fillRect(x,y,cardW,cardH);
       ctx.restore();
 
+      ctx.save();
+      ctx.shadowColor=color;
+      ctx.shadowBlur=glow+5;
       ctx.strokeStyle="white";
-      ctx.lineWidth=3;
+      ctx.lineWidth=c.rarity==="legendary"?4:3;
       ctx.strokeRect(x,y,cardW,cardH);
+      ctx.restore();
 
       ctx.fillStyle="black";
       ctx.textAlign="center";
@@ -1380,7 +1369,6 @@ function loop(timestamp){
   }
 
   const dt=Math.min((timestamp-game.last)/1000,0.05);
-
   game.last=timestamp;
 
   update(dt);
