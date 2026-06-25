@@ -1761,11 +1761,11 @@ Object.assign(attackCooldown, {
   A17: 3.4,
   A18: 3.6,
   A19: 3.2,
-  A20: 3.8,
+  A20: 9.0,
   A21: 3.2,
   A22: 2.1,
-  A23: 3.6,
-  A24: 3.3,
+  A23: 7.0,
+  A24: 11.0,
   A25: 4.4
 });
 
@@ -2557,37 +2557,66 @@ const specials = {
   },
 
   S16() {
-    const w = 120;
-    const h = 160;
+    const cx = arena.x;
+    const cy = arena.y;
+    const startAngle = Math.random() * Math.PI * 2;
 
-    const p = randomNearPlayer(110, 220, 80, 100);
-
-    const x = clamp(p.x - w / 2, left() + 20, right() - w - 20);
-    const y = clamp(p.y - h / 2, topY() + 20, bottom() - h - 20);
-
-    addWarning("rect", {
-      x,
-      y,
-      w,
-      h,
+    addWarning("circleArrow", {
+      x: cx,
+      y: cy,
+      r: 95,
       life: 2.0
     });
+
+    addText("PRISM CORE", cx, cy - 120, "#ff66ff", 1.5);
 
     game.delayed.push({
       time: 2.0,
       fn() {
-        game.warnings.push({
-          type: "rectBlast",
-          x,
-          y,
-          w,
-          h,
-          life: 0.25,
-          max: 0.25
-        });
+        for (let wave = 0; wave < 3; wave++) {
+          game.delayed.push({
+            time: wave * 0.45,
+            fn() {
+              const gapCenter = startAngle + wave * 0.9;
+              const bulletCount = 28;
+              const gapSize = 0.85;
 
-        if (player.x > x && player.x < x + w && player.y > y && player.y < y + h) {
-          damagePlayer(currentSpecialDamage() + 20, true, true);
+              for (let i = 0; i < bulletCount; i++) {
+                const a = Math.PI * 2 / bulletCount * i + wave * 0.22;
+
+                const diff = Math.abs(Math.atan2(
+                  Math.sin(a - gapCenter),
+                  Math.cos(a - gapCenter)
+                ));
+
+                if (diff < gapSize) continue;
+
+                shootAngle(
+                  cx,
+                  cy,
+                  a,
+                  190 + wave * 25,
+                  "special",
+                  8
+                );
+              }
+
+              for (let j = 0; j < 12; j++) {
+                const pa = Math.PI * 2 / 12 * j + wave * 0.4;
+
+                game.particles.push({
+                  x: cx,
+                  y: cy,
+                  vx: Math.cos(pa) * 120,
+                  vy: Math.sin(pa) * 120,
+                  a: 1,
+                  fade: 1.2,
+                  r: 3,
+                  color: "#ff66ff"
+                });
+              }
+            }
+          });
         }
       }
     });
@@ -2752,7 +2781,7 @@ function updateSpecials(dt) {
     S13: 3.0,
     S14: 2.2,
     S15: 2.2,
-    S16: 2.6,
+    S16: 4.0,
     S17: 2.6,
     S18: 2.5,
     S19: 5.0,
