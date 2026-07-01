@@ -26,48 +26,359 @@ const canvas=document.getElementById("game"),ctx=canvas.getContext("2d");
 canvas.width=450;canvas.height=900;
 const W=450,H=900;
 const CFG={startHp:160,playerR:10,playerSpeed:290,arenaW:300,arenaH:680,normalDamage:12,specialDamage:25,normalR:7,specialR:11,maxBullets:850,cardInterval:25,cardSelectTime:10,penaltyShowTime:5,specialBaseInterval:19,specialMinInterval:7,bossEvery:120,bossDuration:25,bossNormalSlow:1.15,invincibleTime:2,dragSensitivity:1.15};
-function dailyKey(){const d=new Date();return"ultimate_survival_daily_"+d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
-function loadGlobal(){try{return JSON.parse(localStorage.getItem("ultimate_survival_global")||"{}")}catch(e){return{}}}
-const globalSave=Object.assign({totalPlays:0,totalDeaths:0,totalPlayTime:0,totalBossClears:0,totalCards:0,totalLegendary:0,totalPenalties:0,totalDodges:0,totalHits:0,soundOn:true,bgmOn:true,masterVolume:.8,sfxVolume:.9,bgmVolume:.55,vibration:true,survivorSkin:false,tutorialDone:false,cardTypes:[],penaltyTypes:[],bossSeen:{},bossClear:{},bossAttackSeen:{}},loadGlobal());
-function saveGlobal(){localStorage.setItem("ultimate_survival_global",JSON.stringify(globalSave));if(window.queueAccountSave)window.queueAccountSave()}
+
+function dailyKey(){
+  const d=new Date();
+  return"ultimate_survival_daily_"+d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+
+function loadGlobal(){
+  try{
+    return JSON.parse(localStorage.getItem("ultimate_survival_global")||"{}");
+  }catch(e){
+    return{};
+  }
+}
+
+const globalSave=Object.assign({
+  totalPlays:0,
+  totalDeaths:0,
+  totalPlayTime:0,
+  totalBossClears:0,
+  totalCards:0,
+  totalLegendary:0,
+  totalPenalties:0,
+  totalDodges:0,
+  totalHits:0,
+  soundOn:true,
+  bgmOn:true,
+  masterVolume:.8,
+  sfxVolume:.9,
+  bgmVolume:.55,
+  vibration:true,
+  survivorSkin:false,
+  tutorialDone:false,
+  cardTypes:[],
+  penaltyTypes:[],
+  bossSeen:{},
+  bossClear:{},
+  bossAttackSeen:{}
+},loadGlobal());
+
+function saveGlobal(){
+  localStorage.setItem("ultimate_survival_global",JSON.stringify(globalSave));
+  if(window.queueAccountSave)window.queueAccountSave();
+}
+
 const SERVER_URL="https://YOUR_WORKER_NAME.YOUR_ACCOUNT.workers.dev";
-const authState={ready:false,guest:false,id:localStorage.getItem("us_auth_id")||"",token:localStorage.getItem("us_auth_token")||"",leaderboard:[],msg:"",screen:"choice"};
+
+const authState={
+  ready:false,
+  guest:false,
+  id:localStorage.getItem("us_auth_id")||"",
+  token:localStorage.getItem("us_auth_token")||"",
+  leaderboard:[],
+  msg:"",
+  screen:"choice"
+};
+
+if(!serverConfigured()){
+  localStorage.removeItem("us_auth_id");
+  localStorage.removeItem("us_auth_token");
+  authState.id="";
+  authState.token="";
+}
+
 let authSaveTimer=null;
-function serverConfigured(){return SERVER_URL.indexOf("YOUR_WORKER_NAME")<0&&SERVER_URL.startsWith("https://")}
-function authPanel(){return document.getElementById("authPanel")}
-function authMsg(t,bad=true){const el=document.getElementById("authMsg");if(el){el.style.color=bad?"#ff7777":"#66ff66";el.textContent=t}}
+
+function serverConfigured(){
+  return SERVER_URL.indexOf("YOUR_WORKER_NAME")<0&&SERVER_URL.startsWith("https://");
+}
+
+function authPanel(){
+  return document.getElementById("authPanel");
+}
+
+function authMsg(t,bad=true){
+  const el=document.getElementById("authMsg");
+  if(el){
+    el.style.color=bad?"#ff7777":"#66ff66";
+    el.textContent=t;
+  }
+}
+
 function renderAuth(msg=""){
-  const p=authPanel(); if(!p)return;
+  const p=authPanel();
+  if(!p)return;
+
   if(authState.screen==="choice"){
     p.innerHTML='<h1>Ultimate Survival</h1><button onclick="showSignupScreen()">회원가입</button><button onclick="showLoginScreen()">로그인</button><button onclick="usGuest()">게스트 플레이</button><div id="authMsg">친구끼리 간단 로그인 / 게스트 가능</div>';
     if(msg)authMsg(msg,false);
     return;
   }
+
   const title=authState.screen==="signup"?"회원가입":"로그인";
   const action=authState.screen==="signup"?"usSignup()":"usLogin()";
   const btn=authState.screen==="signup"?"회원가입 완료":"로그인";
+
   p.innerHTML='<h1>'+title+'</h1><input id="authId" autocomplete="username" placeholder="아이디"><input id="authPw" type="password" autocomplete="current-password" placeholder="비밀번호"><button onclick="'+action+'">'+btn+'</button><button onclick="showChoiceScreen()">뒤로</button><div id="authMsg">아이디/비밀번호 입력</div>';
+
   if(msg)authMsg(msg,true);
 }
-window.showChoiceScreen=function(){authState.screen="choice";renderAuth()};
-window.showSignupScreen=function(){authState.screen="signup";renderAuth()};
-window.showLoginScreen=function(){authState.screen="login";renderAuth()};
-function hideAuth(){const e=document.getElementById("authBox");if(e)e.style.display="none"}
-function showAuth(){const e=document.getElementById("authBox");if(e)e.style.display="flex";renderAuth()}
-function guestMergeId(){let id=localStorage.getItem("us_guest_merge_id");if(!id){id="g_"+Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem("us_guest_merge_id",id)}return id}
-function unique(a){return [...new Set((a||[]).filter(Boolean))]}
-function saveSnapshot(){bankPlayTime&&game&&game.started&&bankPlayTime();return{todayKey:dailyKey(),best:Math.max(Number(localStorage.getItem("ultimate_survival_best")||0),game?game.best||0:0),todayBest:Math.max(Number(localStorage.getItem(dailyKey())||0),game?game.todayBest||0:0),totalPlays:globalSave.totalPlays||0,totalDeaths:globalSave.totalDeaths||0,totalPlayTime:globalSave.totalPlayTime||0,totalBossClears:globalSave.totalBossClears||0,totalCards:globalSave.totalCards||0,totalLegendary:globalSave.totalLegendary||0,totalPenalties:globalSave.totalPenalties||0,totalDodges:globalSave.totalDodges||0,totalHits:globalSave.totalHits||0,cardTypes:unique(globalSave.cardTypes),penaltyTypes:unique(globalSave.penaltyTypes),achievements:unique(JSON.parse(localStorage.getItem("ultimate_survival_achievements")||"[]")),survivorSkin:!!globalSave.survivorSkin,tutorialDone:!!globalSave.tutorialDone,bossSeen:globalSave.bossSeen||{},bossClear:globalSave.bossClear||{},bossAttackSeen:globalSave.bossAttackSeen||{}}}
-function applyAccountSave(d){if(!d)return;globalSave.totalPlays=d.totalPlays||0;globalSave.totalDeaths=d.totalDeaths||0;globalSave.totalPlayTime=d.totalPlayTime||0;globalSave.totalBossClears=d.totalBossClears||0;globalSave.totalCards=d.totalCards||0;globalSave.totalLegendary=d.totalLegendary||0;globalSave.totalPenalties=d.totalPenalties||0;globalSave.totalDodges=d.totalDodges||0;globalSave.totalHits=d.totalHits||0;globalSave.cardTypes=unique(d.cardTypes);globalSave.penaltyTypes=unique(d.penaltyTypes);globalSave.survivorSkin=!!d.survivorSkin;globalSave.tutorialDone=!!d.tutorialDone;globalSave.bossSeen=d.bossSeen||{};globalSave.bossClear=d.bossClear||{};globalSave.bossAttackSeen=d.bossAttackSeen||{};localStorage.setItem("ultimate_survival_global",JSON.stringify(globalSave));localStorage.setItem("ultimate_survival_best",String(d.best||0));if(d.todayKey===dailyKey())localStorage.setItem(dailyKey(),String(d.todayBest||0));localStorage.setItem("ultimate_survival_achievements",JSON.stringify(unique(d.achievements)));if(game){game.best=Number(localStorage.getItem("ultimate_survival_best")||0);game.todayBest=Number(localStorage.getItem(dailyKey())||0);game.achievements=new Set(unique(d.achievements))}}
-async function authApi(path,body){if(!serverConfigured())throw new Error("SERVER_URL에 Cloudflare Worker 주소를 먼저 넣어야 함");const r=await fetch(SERVER_URL.replace(/\/$/,"")+"/"+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})});const j=await r.json().catch(()=>({ok:false,error:"서버 응답 오류"}));if(!r.ok||!j.ok)throw new Error(j.error||"요청 실패");return j}
-async function finishAuth(j,id){authState.ready=true;authState.guest=false;authState.id=id;authState.token=j.token;localStorage.setItem("us_auth_id",id);localStorage.setItem("us_auth_token",j.token);applyAccountSave(j.save);hideAuth();if(game)resetGame();await loadLeaderboard()}
-window.usLogin=async function(){const id=document.getElementById("authId").value.trim(),password=document.getElementById("authPw").value;if(!id||!password)return authMsg("아이디와 비밀번호를 입력해줘");try{authMsg("로그인 중...",false);const j=await authApi("login",{id,password,guest:saveSnapshot(),mergeId:guestMergeId()});await finishAuth(j,id)}catch(e){authMsg(e.message)}};
-window.usSignup=async function(){const id=document.getElementById("authId").value.trim(),password=document.getElementById("authPw").value;if(!/^[a-zA-Z0-9_]{3,16}$/.test(id))return authMsg("아이디는 영문/숫자/_ 3~16자");if(password.length<4)return authMsg("비밀번호는 4자 이상");try{authMsg("회원가입 중...",false);const j=await authApi("signup",{id,password,guest:saveSnapshot(),mergeId:guestMergeId()});await finishAuth(j,id)}catch(e){authMsg(e.message)}};
-window.usGuest=function(){authState.ready=true;authState.guest=true;hideAuth();if(game)game.paused=false};
-window.usLogout=function(){localStorage.removeItem("us_auth_id");localStorage.removeItem("us_auth_token");authState.ready=false;authState.guest=false;authState.id="";authState.token="";authState.screen="choice";showAuth();if(game){game.paused=true;closeSubMenus&&closeSubMenus()}};
-window.queueAccountSave=function(){if(!authState.token||authState.guest)return;clearTimeout(authSaveTimer);authSaveTimer=setTimeout(submitAccountSave,1200)};
-async function submitAccountSave(){if(!authState.token||authState.guest)return;try{await authApi("submit",{token:authState.token,save:saveSnapshot()});await loadLeaderboard()}catch(e){console.warn(e.message)}}
-async function loadLeaderboard(){if(!serverConfigured())return;try{const j=await authApi("top10",{});authState.leaderboard=j.rows||[]}catch(e){authState.leaderboard=[]}}
-if(authState.token&&authState.id){authState.ready=true;hideAuth();loadLeaderboard()}else showAuth();
+
+window.showChoiceScreen=function(){
+  authState.screen="choice";
+  renderAuth();
+};
+
+window.showSignupScreen=function(){
+  authState.screen="signup";
+  renderAuth();
+};
+
+window.showLoginScreen=function(){
+  authState.screen="login";
+  renderAuth();
+};
+
+function hideAuth(){
+  const e=document.getElementById("authBox");
+  if(e)e.style.display="none";
+}
+
+function showAuth(){
+  const e=document.getElementById("authBox");
+  if(e)e.style.display="flex";
+  renderAuth();
+}
+
+function guestMergeId(){
+  let id=localStorage.getItem("us_guest_merge_id");
+
+  if(!id){
+    id="g_"+Math.random().toString(36).slice(2)+Date.now().toString(36);
+    localStorage.setItem("us_guest_merge_id",id);
+  }
+
+  return id;
+}
+
+function unique(a){
+  return [...new Set((a||[]).filter(Boolean))];
+}
+
+function saveSnapshot(){
+  bankPlayTime&&game&&game.started&&bankPlayTime();
+
+  return{
+    todayKey:dailyKey(),
+    best:Math.max(Number(localStorage.getItem("ultimate_survival_best")||0),game?game.best||0:0),
+    todayBest:Math.max(Number(localStorage.getItem(dailyKey())||0),game?game.todayBest||0:0),
+    totalPlays:globalSave.totalPlays||0,
+    totalDeaths:globalSave.totalDeaths||0,
+    totalPlayTime:globalSave.totalPlayTime||0,
+    totalBossClears:globalSave.totalBossClears||0,
+    totalCards:globalSave.totalCards||0,
+    totalLegendary:globalSave.totalLegendary||0,
+    totalPenalties:globalSave.totalPenalties||0,
+    totalDodges:globalSave.totalDodges||0,
+    totalHits:globalSave.totalHits||0,
+    cardTypes:unique(globalSave.cardTypes),
+    penaltyTypes:unique(globalSave.penaltyTypes),
+    achievements:unique(JSON.parse(localStorage.getItem("ultimate_survival_achievements")||"[]")),
+    survivorSkin:!!globalSave.survivorSkin,
+    tutorialDone:!!globalSave.tutorialDone,
+    bossSeen:globalSave.bossSeen||{},
+    bossClear:globalSave.bossClear||{},
+    bossAttackSeen:globalSave.bossAttackSeen||{}
+  };
+}
+
+function applyAccountSave(d){
+  if(!d)return;
+
+  globalSave.totalPlays=d.totalPlays||0;
+  globalSave.totalDeaths=d.totalDeaths||0;
+  globalSave.totalPlayTime=d.totalPlayTime||0;
+  globalSave.totalBossClears=d.totalBossClears||0;
+  globalSave.totalCards=d.totalCards||0;
+  globalSave.totalLegendary=d.totalLegendary||0;
+  globalSave.totalPenalties=d.totalPenalties||0;
+  globalSave.totalDodges=d.totalDodges||0;
+  globalSave.totalHits=d.totalHits||0;
+  globalSave.cardTypes=unique(d.cardTypes);
+  globalSave.penaltyTypes=unique(d.penaltyTypes);
+  globalSave.survivorSkin=!!d.survivorSkin;
+  globalSave.tutorialDone=!!d.tutorialDone;
+  globalSave.bossSeen=d.bossSeen||{};
+  globalSave.bossClear=d.bossClear||{};
+  globalSave.bossAttackSeen=d.bossAttackSeen||{};
+
+  localStorage.setItem("ultimate_survival_global",JSON.stringify(globalSave));
+  localStorage.setItem("ultimate_survival_best",String(d.best||0));
+
+  if(d.todayKey===dailyKey()){
+    localStorage.setItem(dailyKey(),String(d.todayBest||0));
+  }
+
+  localStorage.setItem("ultimate_survival_achievements",JSON.stringify(unique(d.achievements)));
+
+  if(game){
+    game.best=Number(localStorage.getItem("ultimate_survival_best")||0);
+    game.todayBest=Number(localStorage.getItem(dailyKey())||0);
+    game.achievements=new Set(unique(d.achievements));
+  }
+}
+
+async function authApi(path,body){
+  if(!serverConfigured())throw new Error("SERVER_URL에 Cloudflare Worker 주소를 먼저 넣어야 함");
+
+  const r=await fetch(SERVER_URL.replace(/\/$/,"")+"/"+path,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(body||{})
+  });
+
+  const j=await r.json().catch(()=>({ok:false,error:"서버 응답 오류"}));
+
+  if(!r.ok||!j.ok)throw new Error(j.error||"요청 실패");
+
+  return j;
+}
+
+async function finishAuth(j,id){
+  authState.ready=true;
+  authState.guest=false;
+  authState.id=id;
+  authState.token=j.token;
+
+  localStorage.setItem("us_auth_id",id);
+  localStorage.setItem("us_auth_token",j.token);
+
+  applyAccountSave(j.save);
+  hideAuth();
+
+  if(game)resetGame();
+
+  await loadLeaderboard();
+}
+
+window.usLogin=async function(){
+  const id=document.getElementById("authId").value.trim();
+  const password=document.getElementById("authPw").value;
+
+  if(!id||!password)return authMsg("아이디와 비밀번호를 입력해줘");
+
+  try{
+    authMsg("로그인 중...",false);
+    const j=await authApi("login",{id,password,guest:saveSnapshot(),mergeId:guestMergeId()});
+    await finishAuth(j,id);
+  }catch(e){
+    authMsg(e.message);
+  }
+};
+
+window.usSignup=async function(){
+  const id=document.getElementById("authId").value.trim();
+  const password=document.getElementById("authPw").value;
+
+  if(!/^[a-zA-Z0-9_]{3,16}$/.test(id))return authMsg("아이디는 영문/숫자/_ 3~16자");
+  if(password.length<4)return authMsg("비밀번호는 4자 이상");
+
+  try{
+    authMsg("회원가입 중...",false);
+    const j=await authApi("signup",{id,password,guest:saveSnapshot(),mergeId:guestMergeId()});
+    await finishAuth(j,id);
+  }catch(e){
+    authMsg(e.message);
+  }
+};
+
+window.usGuest=function(){
+  authState.ready=true;
+  authState.guest=true;
+  authState.id="";
+  authState.token="";
+
+  localStorage.removeItem("us_auth_id");
+  localStorage.removeItem("us_auth_token");
+
+  hideAuth();
+
+  if(game){
+    game.paused=false;
+    game.tutorialOpen=false;
+    game.started=false;
+    game.gameOver=false;
+
+    game.countdown=3;
+    game.countdownTimer=0;
+    game.showStart=false;
+    game.startTimer=0;
+
+    game.time=0;
+    game.sessionPlayTime=0;
+    game.savedSessionSeconds=0;
+    game.last=performance.now();
+
+    stopDrag();
+  }
+};
+
+window.usLogout=function(){
+  localStorage.removeItem("us_auth_id");
+  localStorage.removeItem("us_auth_token");
+
+  authState.ready=false;
+  authState.guest=false;
+  authState.id="";
+  authState.token="";
+  authState.screen="choice";
+
+  showAuth();
+
+  if(game){
+    game.paused=true;
+    closeSubMenus&&closeSubMenus();
+  }
+};
+
+window.queueAccountSave=function(){
+  if(!authState.token||authState.guest)return;
+
+  clearTimeout(authSaveTimer);
+  authSaveTimer=setTimeout(submitAccountSave,1200);
+};
+
+async function submitAccountSave(){
+  if(!authState.token||authState.guest)return;
+
+  try{
+    await authApi("submit",{token:authState.token,save:saveSnapshot()});
+    await loadLeaderboard();
+  }catch(e){
+    console.warn(e.message);
+  }
+}
+
+async function loadLeaderboard(){
+  if(!serverConfigured())return;
+
+  try{
+    const j=await authApi("top10",{});
+    authState.leaderboard=j.rows||[];
+  }catch(e){
+    authState.leaderboard=[];
+  }
+}
+
+if(authState.token&&authState.id){
+  authState.ready=true;
+  hideAuth();
+  loadLeaderboard();
+}else{
+  showAuth();
+}
 
 const player={x:W/2,y:H/2,r:CFG.playerR,speed:CFG.playerSpeed};
 const arena={x:W/2,y:H/2,w:CFG.arenaW,h:CFG.arenaH};
@@ -75,15 +386,219 @@ const keys={up:false,down:false,left:false,right:false};
 const input={dx:0,dy:0};
 const drag={active:false,touchId:null,lastX:0,lastY:0};
 const scroll={active:false,page:"",lastY:0,y:{}};
+
 let game,audioCtx=null,bgmTimer=null,currentBgmMode="",bgmStep=0;
-function makeGame(){const weights={},bossWeights={};for(let i=1;i<=20;i++)weights["S"+i]=100;for(const b of bossList)bossWeights[b.id]=100;return{started:false,gameOver:false,paused:false,settingsOpen:false,codexOpen:false,bossCodexOpen:false,achievementsOpen:false,statsOpen:false,recordsOpen:false,runCardsOpen:false,leaderboardOpen:false,tutorialOpen:!globalSave.tutorialDone,confirmRestart:false,resumeCountdown:false,resumeCount:3,resumeTimer:0,countdown:3,countdownTimer:0,showStart:false,startTimer:0,time:0,last:0,sessionPlayTime:0,savedSessionSeconds:0,hp:CFG.startHp,maxHp:CFG.startHp,displayHp:CFG.startHp,regen:0,dodge:0,lowHpDodge:0,damageReduce:0,specialReduce:0,bulletBonus:0,bulletSlow:0,lowHpNormalReduce:0,normalDRTimer:0,normalDRValue:0,tempBulletSlowTimer:0,tempBulletSlowValue:0,afterSpecialSlow:false,afterSpecialSlowTimer:0,specialNoHitBuff:false,specialNoHitTrack:0,specialNoHitFailed:false,specialSuccessDefenseTimer:0,bossStartBlessing:false,bossEndRefresh:false,unyielding:false,shield:0,playerSizeBonus:0,hasRevive:false,reviveUsed:false,invincible:0,dodgeFlash:0,hitCooldown:0,specialHitCooldown:0,specialLock:0,normalDamageBonus:0,specialDamageBonus:0,attackSwapCount:0,specialInterval:CFG.specialBaseInterval,bullets:[],texts:[],warnings:[],delayed:[],specialObjects:[],particles:[],notices:[],trail:[],activeAttacks:[],attackBag:[],attackScheduleIndex:0,specialTimer:0,lastSpecial:null,specialWeights:weights,bossWeights,bossActive:false,bossTimer:0,nextBossTime:CFG.bossEvery,bossIntro:false,bossIntroTimer:0,bossClears:0,currentBoss:null,bossAttackTimer:0,bossAttackIndex:0,bossNoHit:false,nextCardTime:CFG.cardInterval,cardOpen:false,cardTimer:0,cardChoices:[],cardAnimTimer:0,penaltyCooldown:0,penaltyOpen:false,penaltyTimer:0,penaltyText:"",bossRewardOpen:false,bossRewardTimer:0,bossRewardCard:null,comboOpen:false,comboTimer:0,comboName:"",survivorOpen:false,survivorTimer:0,survivorDone:false,ownedCards:new Set(),ownedPenalties:new Set(),activePenalties:[],runCards:[],runPenalties:[],stats:{cards:0,legendary:0,penalties:0,bossClears:0,dodges:0,damageTaken:0,hits:0,cardTimeouts:0},achievements:new Set(JSON.parse(localStorage.getItem("ultimate_survival_achievements")||"[]")),best:Number(localStorage.getItem("ultimate_survival_best")||0),todayBest:Number(localStorage.getItem(dailyKey())||0),newRecord:false,newDaily:false,savedDeath:false}}
-function left(){return arena.x-arena.w/2}function right(){return arena.x+arena.w/2}function topY(){return arena.y-arena.h/2}function bottom(){return arena.y+arena.h/2}function clamp(v,a,b){return Math.max(a,Math.min(b,v))}function dist(x1,y1,x2,y2){return Math.hypot(x1-x2,y1-y2)}function rand(arr){return arr[Math.floor(Math.random()*arr.length)]}function fmt(t){t=Math.floor(t);return String(Math.floor(t/60)).padStart(2,"0")+":"+String(t%60).padStart(2,"0")}function fmtLong(t){t=Math.floor(t);const h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=t%60;if(h>0)return h+"시간 "+m+"분";if(m>0)return m+"분 "+s+"초";return s+"초"}
-function stopDrag(){drag.active=false;drag.touchId=null;scroll.active=false;input.dx=0;input.dy=0}
-function clampPlayer(){player.r=CFG.playerR*(1+game.playerSizeBonus);player.x=clamp(player.x,left()+player.r,right()-player.r);player.y=clamp(player.y,topY()+player.r,bottom()-player.r)}
-function addText(text,x,y,color="white",life=.9){game.texts.push({text,x,y,color,life,max:life})}function addNotice(lines,color="#fff"){game.notices.push({lines,life:2,max:2,color})}
-function saveAchievements(){localStorage.setItem("ultimate_survival_achievements",JSON.stringify([...game.achievements]))}
-function unlockAchievement(id,text){if(game.achievements.has(id))return;game.achievements.add(id);saveAchievements();addNotice(["업적 달성",text],"#FFD700");sfx("achievement");if(id==="survivor"){globalSave.survivorSkin=true;saveGlobal();fanfare("survivor")}}
-function bankPlayTime(){const now=Math.floor(game.sessionPlayTime),delta=now-game.savedSessionSeconds;if(delta>0){globalSave.totalPlayTime+=delta;game.savedSessionSeconds=now;saveGlobal()}}function getAudio(){try{if(!audioCtx){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;audioCtx=new AC()}if(audioCtx.state==="suspended")audioCtx.resume();return audioCtx}catch(e){return null}}
+
+function makeGame(){
+  const weights={},bossWeights={};
+
+  for(let i=1;i<=20;i++)weights["S"+i]=100;
+  for(const b of bossList)bossWeights[b.id]=100;
+
+  return{
+    started:false,
+    gameOver:false,
+    paused:false,
+    settingsOpen:false,
+    codexOpen:false,
+    bossCodexOpen:false,
+    achievementsOpen:false,
+    statsOpen:false,
+    recordsOpen:false,
+    runCardsOpen:false,
+    leaderboardOpen:false,
+    tutorialOpen:!globalSave.tutorialDone,
+    confirmRestart:false,
+    resumeCountdown:false,
+    resumeCount:3,
+    resumeTimer:0,
+    countdown:3,
+    countdownTimer:0,
+    showStart:false,
+    startTimer:0,
+    time:0,
+    last:0,
+    sessionPlayTime:0,
+    savedSessionSeconds:0,
+    hp:CFG.startHp,
+    maxHp:CFG.startHp,
+    displayHp:CFG.startHp,
+    regen:0,
+    dodge:0,
+    lowHpDodge:0,
+    damageReduce:0,
+    specialReduce:0,
+    bulletBonus:0,
+    bulletSlow:0,
+    lowHpNormalReduce:0,
+    normalDRTimer:0,
+    normalDRValue:0,
+    tempBulletSlowTimer:0,
+    tempBulletSlowValue:0,
+    afterSpecialSlow:false,
+    afterSpecialSlowTimer:0,
+    specialNoHitBuff:false,
+    specialNoHitTrack:0,
+    specialNoHitFailed:false,
+    specialSuccessDefenseTimer:0,
+    bossStartBlessing:false,
+    bossEndRefresh:false,
+    unyielding:false,
+    shield:0,
+    playerSizeBonus:0,
+    hasRevive:false,
+    reviveUsed:false,
+    invincible:0,
+    dodgeFlash:0,
+    hitCooldown:0,
+    specialHitCooldown:0,
+    specialLock:0,
+    normalDamageBonus:0,
+    specialDamageBonus:0,
+    attackSwapCount:0,
+    specialInterval:CFG.specialBaseInterval,
+    bullets:[],
+    texts:[],
+    warnings:[],
+    delayed:[],
+    specialObjects:[],
+    particles:[],
+    notices:[],
+    trail:[],
+    activeAttacks:[],
+    attackBag:[],
+    attackScheduleIndex:0,
+    specialTimer:0,
+    lastSpecial:null,
+    specialWeights:weights,
+    bossWeights,
+    bossActive:false,
+    bossTimer:0,
+    nextBossTime:CFG.bossEvery,
+    bossIntro:false,
+    bossIntroTimer:0,
+    bossClears:0,
+    currentBoss:null,
+    bossAttackTimer:0,
+    bossAttackIndex:0,
+    bossNoHit:false,
+    nextCardTime:CFG.cardInterval,
+    cardOpen:false,
+    cardTimer:0,
+    cardChoices:[],
+    cardAnimTimer:0,
+    penaltyCooldown:0,
+    penaltyOpen:false,
+    penaltyTimer:0,
+    penaltyText:"",
+    bossRewardOpen:false,
+    bossRewardTimer:0,
+    bossRewardCard:null,
+    comboOpen:false,
+    comboTimer:0,
+    comboName:"",
+    survivorOpen:false,
+    survivorTimer:0,
+    survivorDone:false,
+    ownedCards:new Set(),
+    ownedPenalties:new Set(),
+    activePenalties:[],
+    runCards:[],
+    runPenalties:[],
+    stats:{
+      cards:0,
+      legendary:0,
+      penalties:0,
+      bossClears:0,
+      dodges:0,
+      damageTaken:0,
+      hits:0,
+      cardTimeouts:0
+    },
+    achievements:new Set(JSON.parse(localStorage.getItem("ultimate_survival_achievements")||"[]")),
+    best:Number(localStorage.getItem("ultimate_survival_best")||0),
+    todayBest:Number(localStorage.getItem(dailyKey())||0),
+    newRecord:false,
+    newDaily:false,
+    savedDeath:false
+  };
+}
+
+function left(){return arena.x-arena.w/2}
+function right(){return arena.x+arena.w/2}
+function topY(){return arena.y-arena.h/2}
+function bottom(){return arena.y+arena.h/2}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function dist(x1,y1,x2,y2){return Math.hypot(x1-x2,y1-y2)}
+function rand(arr){return arr[Math.floor(Math.random()*arr.length)]}
+
+function fmt(t){
+  t=Math.floor(t);
+  return String(Math.floor(t/60)).padStart(2,"0")+":"+String(t%60).padStart(2,"0");
+}
+
+function fmtLong(t){
+  t=Math.floor(t);
+  const h=Math.floor(t/3600);
+  const m=Math.floor(t%3600/60);
+  const s=t%60;
+
+  if(h>0)return h+"시간 "+m+"분";
+  if(m>0)return m+"분 "+s+"초";
+  return s+"초";
+}
+
+function stopDrag(){
+  drag.active=false;
+  drag.touchId=null;
+  scroll.active=false;
+  input.dx=0;
+  input.dy=0;
+}
+
+function clampPlayer(){
+  player.r=CFG.playerR*(1+game.playerSizeBonus);
+  player.x=clamp(player.x,left()+player.r,right()-player.r);
+  player.y=clamp(player.y,topY()+player.r,bottom()-player.r);
+}
+
+function addText(text,x,y,color="white",life=.9){
+  game.texts.push({text,x,y,color,life,max:life});
+}
+
+function addNotice(lines,color="#fff"){
+  game.notices.push({lines,life:2,max:2,color});
+}
+
+function saveAchievements(){
+  localStorage.setItem("ultimate_survival_achievements",JSON.stringify([...game.achievements]));
+}
+
+function unlockAchievement(id,text){
+  if(game.achievements.has(id))return;
+
+  game.achievements.add(id);
+  saveAchievements();
+  addNotice(["업적 달성",text],"#FFD700");
+  sfx("achievement");
+
+  if(id==="survivor"){
+    globalSave.survivorSkin=true;
+    saveGlobal();
+    fanfare("survivor");
+  }
+}
+
+function bankPlayTime(){
+  const now=Math.floor(game.sessionPlayTime);
+  const delta=now-game.savedSessionSeconds;
+
+  if(delta>0){
+    globalSave.totalPlayTime+=delta;
+    game.savedSessionSeconds=now;
+    saveGlobal();
+  }
+}function getAudio(){try{if(!audioCtx){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;audioCtx=new AC()}if(audioCtx.state==="suspended")audioCtx.resume();return audioCtx}catch(e){return null}}
 function playTone(freq,startTime,duration,type,volume){const ac=getAudio();if(!ac)return;const osc=ac.createOscillator(),gain=ac.createGain();osc.type=type||"sine";osc.frequency.setValueAtTime(freq,startTime);const attack=.015,release=Math.max(.04,duration-attack);gain.gain.setValueAtTime(.001,startTime);gain.gain.linearRampToValueAtTime(volume,startTime+attack);gain.gain.exponentialRampToValueAtTime(.001,startTime+attack+release);osc.connect(gain);gain.connect(ac.destination);osc.start(startTime);osc.stop(startTime+duration+.03)}
 function sfx(type){if(!globalSave.soundOn)return;const ac=getAudio();if(!ac)return;const v=.06*globalSave.masterVolume*globalSave.sfxVolume,now=ac.currentTime;if(type==="hit")playTone(130,now,.1,"square",v);else if(type==="dodge")playTone(920,now,.09,"sine",v*.7);else if(type==="card"){playTone(660,now,.12,"triangle",v*.8);playTone(880,now+.05,.1,"triangle",v*.5)}else if(type==="legend"){playTone(660,now,.18,"triangle",v);playTone(990,now+.08,.22,"triangle",v*.85);playTone(1320,now+.18,.25,"triangle",v*.65)}else if(type==="penalty"){playTone(120,now,.25,"sawtooth",v);playTone(80,now+.08,.3,"sawtooth",v*.7)}else if(type==="boss"){playTone(110,now,.22,"sawtooth",v);playTone(82,now+.16,.22,"sawtooth",v)}else if(type==="revive"){playTone(520,now,.2,"triangle",v);playTone(760,now+.08,.25,"triangle",v*.8)}else if(type==="achievement"){playTone(740,now,.16,"triangle",v);playTone(980,now+.08,.16,"triangle",v*.8)}else if(type==="shield")playTone(810,now,.12,"sine",v*.75);else playTone(500,now,.08,"sine",v*.7)}
 const BGM_PATTERNS={early:{interval:420,bass:[110,110,130,147],lead:[220,330,262,330,294,392,330,262],type:"triangle",bassType:"sine"},danger:{interval:360,bass:[98,98,123,147],lead:[294,392,330,440,392,330,294,247],type:"triangle",bassType:"sawtooth"},survive:{interval:300,bass:[87,98,110,130],lead:[349,440,392,523,440,392,349,294],type:"square",bassType:"sawtooth"},veteran:{interval:260,bass:[65,87,98,130],lead:[392,523,440,659,523,440,392,330],type:"square",bassType:"sawtooth"},boss:{interval:210,bass:[55,55,73,82],lead:[220,277,330,277,220,196,220,330],type:"sawtooth",bassType:"sawtooth"},gold:{interval:340,bass:[123,147,196,247],lead:[494,740,659,988,740,659,494,370],type:"triangle",bassType:"sine"}};
@@ -772,7 +1287,7 @@ function shootAngle(x,y,a,s,type="normal",r=null,color=null){
 function shootAt(x,y,tx,ty,s,type="normal",r=null,color=null){
   const dx=tx-x,dy=ty-y,d=Math.hypot(dx,dy)||1;
   createBullet({x,y,vx:dx/d*s,vy:dy/d*s,type,r,color});
-                                                                                                             }const bossList=[
+  }const bossList=[
 {id:"inferno",name:"인페르노",color:"#ff3333",attackColor:"#ff8800",warningColor:"#ffdd55",bg:"#160006",icon:"🔥",first:4,interval:4,attacks:["flameWall","emberRain","heatWave","lavaSteps","fireSeeds","splitFlare","burningGate"]},
 {id:"storm",name:"스톰",color:"#33ccff",attackColor:"#00ffff",warningColor:"#99ffff",bg:"#001222",icon:"⚡",first:4,interval:4,attacks:["thunderLines","zigzagBolt","windPush","lightningDrops","stormCorridor","sparkFan","cloudBurst"]},
 {id:"venom",name:"베놈",color:"#66ff66",attackColor:"#00ff99",warningColor:"#99ffcc",bg:"#001607",icon:"☣",first:4,interval:4,attacks:["poisonPools","toxicDrizzle","sporeSplit","venomWalls","slowClouds","acidLanes","infectedOrbs"]},
@@ -1941,7 +2456,7 @@ function patternFanWave(color,waves,count,spread,speed){
   }
 
   addWarning("circle",{x:arena.x,y:topY()+60,r:35,life:.7,color});
-  }const attackIds=[];
+                                                                                                                                         }const attackIds=[];
 for(let i=1;i<=25;i++)attackIds.push("A"+i);
 
 const attackCooldown={};
@@ -2804,16 +3319,7 @@ function drawUI(){const hpX=65,hpY=22,hpW=320,hpH=24,hpColor=getHpColor();ctx.fi
 function rarityColor(r){if(r==="common")return"#D9D9D9";if(r==="rare")return"#87CEEB";if(r==="epic")return"#C8A2FF";if(r==="legendary")return"#FFD700";return"#aa0000"}function rarityGlow(r){if(r==="common")return 10;if(r==="rare")return 18;if(r==="epic")return 28;if(r==="legendary")return 42;return 18}
 function wrapText(text,x,y,maxChars,lineH){const lines=String(text).split("\n");let yy=y;for(const part of lines){const words=part.split(" ");let line="";for(const word of words){if((line+word).length>maxChars){ctx.fillText(line,x,yy);yy+=lineH;line=word+" "}else line+=word+" "}ctx.fillText(line,x,yy);yy+=lineH}}
 function drawButton(b,text){ctx.save();ctx.shadowColor="white";ctx.shadowBlur=8;ctx.strokeStyle="white";ctx.lineWidth=2;ctx.strokeRect(b.x,b.y,b.w,b.h);ctx.fillStyle="white";ctx.font="20px Arial";ctx.textAlign="center";ctx.fillText(text,b.x+b.w/2,b.y+28);ctx.restore()}
-function drawRunCardList(x,y,maxLines=5){ctx.fillStyle="white";ctx.font="14px Arial";ctx.textAlign="left";ctx.fillText("이번 판 카드: "+game.runCards.length+"장",x,y);const names=game.runCards.map(c=>c.name);let line="",yy=y+24,count=0;for(const name of names){if((line+name+" · ").length>24){ctx.fillText(line,x,yy);yy+=20;line=name+" · ";count++;if(count>=maxLines)return}else line+=name+" · "}if(line)ctx.fillText(line,x,yy)}
-function drawCodex(){ctx.fillStyle="rgba(0,0,0,0.92)";ctx.fillRect(0,0,W,H);const sy=getScrollY("codex");ctx.save();ctx.translate(0,-sy);ctx.fillStyle="#FFD700";ctx.font="30px Arial";ctx.textAlign="center";ctx.fillText("카드 도감",W/2,70);let y=110;const groups=[["일반","common"],["희귀","rare"],["에픽","epic"],["전설","legendary"]];ctx.textAlign="left";for(const [label,rarity]of groups){const arr=cardData.filter(c=>c.rarity===rarity);ctx.fillStyle=rarityColor(rarity);ctx.font="18px Arial";ctx.fillText(label,45,y);y+=24;ctx.fillStyle="white";ctx.font="13px Arial";for(const c of arr){const got=globalSave.cardTypes.includes(c.id)||game.ownedCards.has(c.id);ctx.fillText((got?"획득 O  ":"획득 X  ")+c.name,60,y);y+=18}y+=8}for(const grade of["weak","mid","strong"]){ctx.fillStyle=penaltyGradeColor(grade);ctx.font="18px Arial";ctx.fillText(penaltyGradeName(grade),45,y);y+=24;ctx.fillStyle="white";ctx.font="13px Arial";for(const p of penaltyData.filter(v=>v.grade===grade)){const got=globalSave.penaltyTypes.includes(p.id)||game.ownedPenalties.has(p.id);ctx.fillText((got?"획득 O  ":"획득 X  ")+p.name,60,y);y+=18}y+=8}ctx.restore();drawButton(menuButtons.back,"뒤로")}
-function drawBossCodex(){ctx.fillStyle="rgba(0,0,0,0.92)";ctx.fillRect(0,0,W,H);const sy=getScrollY("boss");ctx.save();ctx.translate(0,-sy);ctx.fillStyle="#FFD700";ctx.font="30px Arial";ctx.textAlign="center";ctx.fillText("보스 도감",W/2,70);let y=120;for(const b of bossList){const seen=!!globalSave.bossSeen[b.id],clear=globalSave.bossClear[b.id]||0,seenAtk=globalSave.bossAttackSeen[b.id]||[];ctx.textAlign="left";ctx.fillStyle=seen?b.color:"#777";ctx.shadowColor=seen?b.color:"#000";ctx.shadowBlur=seen?12:0;ctx.font="22px Arial";ctx.fillText((seen?b.icon:"?")+" "+(seen?b.name:"???"),55,y);ctx.shadowBlur=0;y+=27;ctx.font="13px Arial";ctx.fillStyle="#ddd";ctx.fillText("클리어 "+(seen?clear:"?")+"회  /  공격 발견 "+(seen?seenAtk.length:"?")+" / 7",75,y);y+=22;ctx.font="12px Arial";for(const atk of b.attacks){const got=seenAtk.includes(atk);ctx.fillStyle=got?"white":"#666";ctx.fillText((got?"· ":"? ")+(got?bossAttackName[atk]:"???"),90,y);y+=17}y+=16}ctx.restore();drawButton(menuButtons.back,"뒤로")}
-function achievementList(){return[["play5m","첫 발걸음","총 플레이 5분"],["play30m","생존자","총 플레이 30분"],["play2h","숙련자","총 플레이 2시간"],["play5h","베테랑","총 플레이 5시간"],["play10h","불굴","총 플레이 10시간"],["play15h","전설","총 플레이 15시간"],["play20h","20시간 플레이","총 플레이 20시간"],["survive60","60초 생존","한 판 60초 생존"],["survive120","120초 생존","한 판 120초 생존"],["survive300","300초 생존","한 판 300초 생존"],["survivor","SURVIVOR","한 판 600초 생존 / 외형 해금"],["bossFirst","첫 보스 조우","보스 첫 조우"],["bossClear1","첫 보스 클리어","보스 1회 클리어"],["bossClear3","보스 3회 클리어","보스 3회 클리어"],["bossClear10","보스 10회 클리어","보스 10회 클리어"],["bossClear30","보스 30회 클리어","보스 30회 클리어"],["sameBoss3","같은 보스 3회 클리어","같은 보스 3회 클리어"],["bossNoHit","노히트 보스","보스전 중 피격 없이 생존"],["card5","카드 5장 획득","한 판 카드 5장"],["card10","카드 10장 획득","한 판 카드 10장"],["card20","카드 20장 획득","한 판 카드 20장"],["legendary","전설 카드 첫 획득","전설 카드 획득"],["legend3","전설 카드 3장 획득","한 판 전설 카드 3장"],["shield","보호막 방어","보호막으로 탄 막기"],["revive","부활 사용","부활 카드 발동"],["dodge50","회피 50회 성공","한 판 회피 50회"],["hit100","피격 100회 누적","누적 피격 100회"],["lowhp10","저체력 생존","HP 10% 이하 10초 생존"],["cardTimeout","카드 시간 초과","카드 선택 시간 초과"]]}
-function drawAchievements(){ctx.fillStyle="rgba(0,0,0,0.92)";ctx.fillRect(0,0,W,H);const sy=getScrollY("ach");ctx.save();ctx.translate(0,-sy);ctx.fillStyle="#FFD700";ctx.font="30px Arial";ctx.textAlign="center";ctx.fillText("업적 도감",W/2,70);ctx.textAlign="left";ctx.font="17px Arial";let y=120;for(const [id,name,desc]of achievementList()){ctx.fillStyle=game.achievements.has(id)?"#66ff66":"#777";ctx.fillText((game.achievements.has(id)?"■ ":"□ ")+name,60,y);ctx.fillStyle="#aaa";ctx.font="12px Arial";ctx.fillText(desc,82,y+17);ctx.font="17px Arial";y+=42}ctx.restore();drawButton(menuButtons.back,"뒤로")}
-function drawCurrentStats(){ctx.fillStyle="rgba(0,0,0,0.92)";ctx.fillRect(0,0,W,H);ctx.fillStyle="#FFD700";ctx.font="30px Arial";ctx.textAlign="center";ctx.fillText("현재 게임 통계",W/2,75);const rows=[["생존 시간",fmt(game.time)],["현재 HP",Math.round(game.hp)+"/"+Math.round(game.maxHp)],["회피율",Math.round(totalDodge()*100)+"%"],["피해 감소",Math.round(totalDamageReduce()*100)+"%"],["특수 피해 감소",Math.round(game.specialReduce*100)+"%"],["재생량","초당 "+(game.regen*100).toFixed(2)+"%"],["일반탄 데미지",Math.round(currentNormalDamage())],["특수탄 데미지",Math.round(currentSpecialDamage())],["공격 교체",game.attackSwapCount+"회"],["보스 클리어",game.stats.bossClears+"회"],["획득 카드",game.stats.cards+"장"],["획득 패널티",game.stats.penalties+"개"]];ctx.font="18px Arial";ctx.fillStyle="white";ctx.textAlign="left";let y=130;for(const [a,b]of rows){ctx.fillText(a,80,y);ctx.textAlign="right";ctx.fillText(String(b),360,y);ctx.textAlign="left";y+=38}drawButton(menuButtons.back,"뒤로")}
-function drawRecords(){bankPlayTime();ctx.fillStyle="rgba(0,0,0,0.92)";ctx.fillRect(0,0,W,H);ctx.fillStyle="#FFD700";ctx.font="30px Arial";ctx.textAlign="center";ctx.fillText("플레이 기록",W/2,75);const rows=[["로그인",authState.guest?"게스트":(authState.id||"없음")],["총 플레이 시간",fmtLong(globalSave.totalPlayTime)],["총 플레이 횟수",globalSave.totalPlays+"회"],["최고 생존 시간",fmt(game.best)],["오늘 최고 기록",fmt(game.todayBest)],["총 사망 횟수",globalSave.totalDeaths+"회"],["보스 클리어",globalSave.totalBossClears+"회"],["총 획득 카드",globalSave.totalCards+"장"],["총 획득 패널티",globalSave.totalPenalties+"개"],["총 회피 성공",globalSave.totalDodges+"회"],["총 피격",globalSave.totalHits+"회"],["획득 카드 종류",globalSave.cardTypes.length+"/"+cardData.length],["획득 패널티 종류",globalSave.penaltyTypes.length+"/"+penaltyData.length],["SURVIVOR 외형",game.achievements.has("survivor")?"해금":"잠김"]];ctx.font="18px Arial";ctx.fillStyle="white";ctx.textAlign="left";let y=130;for(const [a,b]of rows){ctx.fillText(a,75,y);ctx.textAlign="right";ctx.fillText(String(b),370,y);ctx.textAlign="left";y+=36}drawButton(menuButtons.back,"뒤로")}
-function drawRunCardsFull(){ctx.fillStyle="rgba(0,0,0,0.92)";ctx.fillRect(0,0,W,H);const sy=getScrollY("run");ctx.save();ctx.translate(0,-sy);ctx.fillStyle="#FFD700";ctx.font="28px Arial";ctx.textAlign="center";ctx.fillText("이번 판 획득 카드",W/2,70);let y=115;ctx.textAlign="left";ctx.font="16px Arial";for(const c of game.runCards){ctx.fillStyle=rarityColor(c.rarity);ctx.fillText(c.name,70,y);y+=25}if(game.runPenalties.length){y+=15;ctx.fillStyle="#ff5555";ctx.fillText("패널티",70,y);y+=28;for(const p of game.runPenalties){ctx.fillStyle=penaltyGradeColor(p.grade);ctx.fillText("["+penaltyGradeName(p.grade)+"] "+p.name,85,y);y+=25}}if(game.runCards.length===0&&game.runPenalties.length===0){ctx.fillStyle="white";ctx.textAlign="center";ctx.fillText("아직 획득한 카드가 없음",W/2,180)}ctx.restore();drawButton(menuButtons.back,"뒤로")}
-function drawTutorial(){if(!game.tutorialOpen)return;ctx.fillStyle="rgba(0,0,0,0.94)";ctx.fillRect(0,0,W,H);ctx.fillStyle="#FFD700";ctx.font="34px Arial";ctx.textAlign="center";ctx.fillText("튜토리얼",W/2,170);ctx.fillStyle="white";ctx.font="22px Arial";const lines=["드래그로 하얀 원을 이동","25초마다 카드 선택","120초마다 보스전"];let y=270;for(const l of lines){ctx.fillText(l,W/2,y);y+=65}drawButton(menuButtons.tutorialOk,"확인")}
-function drawLeaderboard(){ctx.fillStyle="rgba(0,0,0,0.92)";ctx.fillRect(0,0,W,H);ctx.fillStyle="#FFD700";ctx.font="30px Arial";ctx.textAlign="center";ctx.fillText("전체 랭킹 TOP 10",W/2,75);ctx.font="16px Arial";ctx.fillStyle="white";ctx.fillText(serverConfigured()?"최고 기록 기준":"SERVER_URL 설정 필요",W/2,112);ctx.textAlign="left";ctx.font="20px Arial";let y=165;if(!authState.leaderboard.length){ctx.fillStyle="#aaa";ctx.textAlign="center";ctx.fillText("아직 랭킹이 없거나 서버 연결 전",W/2,260)}else{for(let i=0;i<Math.min(10,authState.leaderboard.length);i++){const r=authState.leaderboard[i];ctx.fillStyle=r.id===authState.id?"#FFD700":"white";ctx.textAlign="left";ctx.fillText((i+1)+"위  "+r.id,70,y);ctx.textAlign="right";ctx.fillText(fmt(r.best||0),370,y);y+=42}}ctx.textAlign="center";ctx.font="14px Arial";ctx.fillStyle="#aaa";ctx.fillText("내 아이디: "+(authState.guest?"게스트":(authState.id||"없음")),W/2,735);drawButton(menuButtons.back,"뒤로")}function drawPauseMenu(){
+function drawRunCardList(x,y,maxLines=5){ctx.fillStyle="white";ctx.font="14px Arial";ctx.textAlign="left";ctx.fillText("이번 판 카드: "+game.runCards.length+"장",x,y);const names=game.runCards.map(c=>c.name);let line="",yy=y+24,count=0;for(const name of names){if((line+name+" · ").length>24){ctx.fillText(line,x,yy);yy+=20;line=name+" · ";count++;if(count>=maxLines)return}else line+=name+" · "}if(line)ctx.fillText(line,x,yy)}function drawPauseMenu(){
   if(!game.paused)return;
 
   ctx.fillStyle="rgba(0,0,0,0.86)";
@@ -3216,7 +3722,16 @@ function drawSurvivor(){
   ctx.font="28px Arial";
   ctx.fillText("외형 해금",W/2,H/2+38);
   ctx.restore();
-  }function drawResumeCountdown(){
+      }
+function drawCodex(){ctx.fillStyle="rgba(0,0,0,0.92)";ctx.fillRect(0,0,W,H);const sy=getScrollY("codex");ctx.save();ctx.translate(0,-sy);ctx.fillStyle="#FFD700";ctx.font="30px Arial";ctx.textAlign="center";ctx.fillText("카드 도감",W/2,70);let y=110;const groups=[["일반","common"],["희귀","rare"],["에픽","epic"],["전설","legendary"]];ctx.textAlign="left";for(const [label,rarity]of groups){const arr=cardData.filter(c=>c.rarity===rarity);ctx.fillStyle=rarityColor(rarity);ctx.font="18px Arial";ctx.fillText(label,45,y);y+=24;ctx.fillStyle="white";ctx.font="13px Arial";for(const c of arr){const got=globalSave.cardTypes.includes(c.id)||game.ownedCards.has(c.id);ctx.fillText((got?"획득 O  ":"획득 X  ")+c.name,60,y);y+=18}y+=8}for(const grade of["weak","mid","strong"]){ctx.fillStyle=penaltyGradeColor(grade);ctx.font="18px Arial";ctx.fillText(penaltyGradeName(grade),45,y);y+=24;ctx.fillStyle="white";ctx.font="13px Arial";for(const p of penaltyData.filter(v=>v.grade===grade)){const got=globalSave.penaltyTypes.includes(p.id)||game.ownedPenalties.has(p.id);ctx.fillText((got?"획득 O  ":"획득 X  ")+p.name,60,y);y+=18}y+=8}ctx.restore();drawButton(menuButtons.back,"뒤로")}
+function drawBossCodex(){ctx.fillStyle="rgba(0,0,0,0.92)";ctx.fillRect(0,0,W,H);const sy=getScrollY("boss");ctx.save();ctx.translate(0,-sy);ctx.fillStyle="#FFD700";ctx.font="30px Arial";ctx.textAlign="center";ctx.fillText("보스 도감",W/2,70);let y=120;for(const b of bossList){const seen=!!globalSave.bossSeen[b.id],clear=globalSave.bossClear[b.id]||0,seenAtk=globalSave.bossAttackSeen[b.id]||[];ctx.textAlign="left";ctx.fillStyle=seen?b.color:"#777";ctx.shadowColor=seen?b.color:"#000";ctx.shadowBlur=seen?12:0;ctx.font="22px Arial";ctx.fillText((seen?b.icon:"?")+" "+(seen?b.name:"???"),55,y);ctx.shadowBlur=0;y+=27;ctx.font="13px Arial";ctx.fillStyle="#ddd";ctx.fillText("클리어 "+(seen?clear:"?")+"회  /  공격 발견 "+(seen?seenAtk.length:"?")+" / 7",75,y);y+=22;ctx.font="12px Arial";for(const atk of b.attacks){const got=seenAtk.includes(atk);ctx.fillStyle=got?"white":"#666";ctx.fillText((got?"· ":"? ")+(got?bossAttackName[atk]:"???"),90,y);y+=17}y+=16}ctx.restore();drawButton(menuButtons.back,"뒤로")}
+function achievementList(){return[["play5m","첫 발걸음","총 플레이 5분"],["play30m","생존자","총 플레이 30분"],["play2h","숙련자","총 플레이 2시간"],["play5h","베테랑","총 플레이 5시간"],["play10h","불굴","총 플레이 10시간"],["play15h","전설","총 플레이 15시간"],["play20h","20시간 플레이","총 플레이 20시간"],["survive60","60초 생존","한 판 60초 생존"],["survive120","120초 생존","한 판 120초 생존"],["survive300","300초 생존","한 판 300초 생존"],["survivor","SURVIVOR","한 판 600초 생존 / 외형 해금"],["bossFirst","첫 보스 조우","보스 첫 조우"],["bossClear1","첫 보스 클리어","보스 1회 클리어"],["bossClear3","보스 3회 클리어","보스 3회 클리어"],["bossClear10","보스 10회 클리어","보스 10회 클리어"],["bossClear30","보스 30회 클리어","보스 30회 클리어"],["sameBoss3","같은 보스 3회 클리어","같은 보스 3회 클리어"],["bossNoHit","노히트 보스","보스전 중 피격 없이 생존"],["card5","카드 5장 획득","한 판 카드 5장"],["card10","카드 10장 획득","한 판 카드 10장"],["card20","카드 20장 획득","한 판 카드 20장"],["legendary","전설 카드 첫 획득","전설 카드 획득"],["legend3","전설 카드 3장 획득","한 판 전설 카드 3장"],["shield","보호막 방어","보호막으로 탄 막기"],["revive","부활 사용","부활 카드 발동"],["dodge50","회피 50회 성공","한 판 회피 50회"],["hit100","피격 100회 누적","누적 피격 100회"],["lowhp10","저체력 생존","HP 10% 이하 10초 생존"],["cardTimeout","카드 시간 초과","카드 선택 시간 초과"]]}
+function drawAchievements(){ctx.fillStyle="rgba(0,0,0,0.92)";ctx.fillRect(0,0,W,H);const sy=getScrollY("ach");ctx.save();ctx.translate(0,-sy);ctx.fillStyle="#FFD700";ctx.font="30px Arial";ctx.textAlign="center";ctx.fillText("업적 도감",W/2,70);ctx.textAlign="left";ctx.font="17px Arial";let y=120;for(const [id,name,desc]of achievementList()){ctx.fillStyle=game.achievements.has(id)?"#66ff66":"#777";ctx.fillText((game.achievements.has(id)?"■ ":"□ ")+name,60,y);ctx.fillStyle="#aaa";ctx.font="12px Arial";ctx.fillText(desc,82,y+17);ctx.font="17px Arial";y+=42}ctx.restore();drawButton(menuButtons.back,"뒤로")}
+function drawCurrentStats(){ctx.fillStyle="rgba(0,0,0,0.92)";ctx.fillRect(0,0,W,H);ctx.fillStyle="#FFD700";ctx.font="30px Arial";ctx.textAlign="center";ctx.fillText("현재 게임 통계",W/2,75);const rows=[["생존 시간",fmt(game.time)],["현재 HP",Math.round(game.hp)+"/"+Math.round(game.maxHp)],["회피율",Math.round(totalDodge()*100)+"%"],["피해 감소",Math.round(totalDamageReduce()*100)+"%"],["특수 피해 감소",Math.round(game.specialReduce*100)+"%"],["재생량","초당 "+(game.regen*100).toFixed(2)+"%"],["일반탄 데미지",Math.round(currentNormalDamage())],["특수탄 데미지",Math.round(currentSpecialDamage())],["공격 교체",game.attackSwapCount+"회"],["보스 클리어",game.stats.bossClears+"회"],["획득 카드",game.stats.cards+"장"],["획득 패널티",game.stats.penalties+"개"]];ctx.font="18px Arial";ctx.fillStyle="white";ctx.textAlign="left";let y=130;for(const [a,b]of rows){ctx.fillText(a,80,y);ctx.textAlign="right";ctx.fillText(String(b),360,y);ctx.textAlign="left";y+=38}drawButton(menuButtons.back,"뒤로")}
+function drawRecords(){bankPlayTime();ctx.fillStyle="rgba(0,0,0,0.92)";ctx.fillRect(0,0,W,H);ctx.fillStyle="#FFD700";ctx.font="30px Arial";ctx.textAlign="center";ctx.fillText("플레이 기록",W/2,75);const rows=[["로그인",authState.guest?"게스트":(authState.id||"없음")],["총 플레이 시간",fmtLong(globalSave.totalPlayTime)],["총 플레이 횟수",globalSave.totalPlays+"회"],["최고 생존 시간",fmt(game.best)],["오늘 최고 기록",fmt(game.todayBest)],["총 사망 횟수",globalSave.totalDeaths+"회"],["보스 클리어",globalSave.totalBossClears+"회"],["총 획득 카드",globalSave.totalCards+"장"],["총 획득 패널티",globalSave.totalPenalties+"개"],["총 회피 성공",globalSave.totalDodges+"회"],["총 피격",globalSave.totalHits+"회"],["획득 카드 종류",globalSave.cardTypes.length+"/"+cardData.length],["획득 패널티 종류",globalSave.penaltyTypes.length+"/"+penaltyData.length],["SURVIVOR 외형",game.achievements.has("survivor")?"해금":"잠김"]];ctx.font="18px Arial";ctx.fillStyle="white";ctx.textAlign="left";let y=130;for(const [a,b]of rows){ctx.fillText(a,75,y);ctx.textAlign="right";ctx.fillText(String(b),370,y);ctx.textAlign="left";y+=36}drawButton(menuButtons.back,"뒤로")}
+function drawRunCardsFull(){ctx.fillStyle="rgba(0,0,0,0.92)";ctx.fillRect(0,0,W,H);const sy=getScrollY("run");ctx.save();ctx.translate(0,-sy);ctx.fillStyle="#FFD700";ctx.font="28px Arial";ctx.textAlign="center";ctx.fillText("이번 판 획득 카드",W/2,70);let y=115;ctx.textAlign="left";ctx.font="16px Arial";for(const c of game.runCards){ctx.fillStyle=rarityColor(c.rarity);ctx.fillText(c.name,70,y);y+=25}if(game.runPenalties.length){y+=15;ctx.fillStyle="#ff5555";ctx.fillText("패널티",70,y);y+=28;for(const p of game.runPenalties){ctx.fillStyle=penaltyGradeColor(p.grade);ctx.fillText("["+penaltyGradeName(p.grade)+"] "+p.name,85,y);y+=25}}if(game.runCards.length===0&&game.runPenalties.length===0){ctx.fillStyle="white";ctx.textAlign="center";ctx.fillText("아직 획득한 카드가 없음",W/2,180)}ctx.restore();drawButton(menuButtons.back,"뒤로")}
+function drawTutorial(){if(!game.tutorialOpen)return;ctx.fillStyle="rgba(0,0,0,0.94)";ctx.fillRect(0,0,W,H);ctx.fillStyle="#FFD700";ctx.font="34px Arial";ctx.textAlign="center";ctx.fillText("튜토리얼",W/2,170);ctx.fillStyle="white";ctx.font="22px Arial";const lines=["드래그로 하얀 원을 이동","25초마다 카드 선택","120초마다 보스전"];let y=270;for(const l of lines){ctx.fillText(l,W/2,y);y+=65}drawButton(menuButtons.tutorialOk,"확인")}
+function drawLeaderboard(){ctx.fillStyle="rgba(0,0,0,0.92)";ctx.fillRect(0,0,W,H);ctx.fillStyle="#FFD700";ctx.font="30px Arial";ctx.textAlign="center";ctx.fillText("전체 랭킹 TOP 10",W/2,75);ctx.font="16px Arial";ctx.fillStyle="white";ctx.fillText(serverConfigured()?"최고 기록 기준":"SERVER_URL 설정 필요",W/2,112);ctx.textAlign="left";ctx.font="20px Arial";let y=165;if(!authState.leaderboard.length){ctx.fillStyle="#aaa";ctx.textAlign="center";ctx.fillText("아직 랭킹이 없거나 서버 연결 전",W/2,260)}else{for(let i=0;i<Math.min(10,authState.leaderboard.length);i++){const r=authState.leaderboard[i];ctx.fillStyle=r.id===authState.id?"#FFD700":"white";ctx.textAlign="left";ctx.fillText((i+1)+"위  "+r.id,70,y);ctx.textAlign="right";ctx.fillText(fmt(r.best||0),370,y);y+=42}}ctx.textAlign="center";ctx.font="14px Arial";ctx.fillStyle="#aaa";ctx.fillText("내 아이디: "+(authState.guest?"게스트":(authState.id||"없음")),W/2,735);drawButton(menuButtons.back,"뒤로")}function drawResumeCountdown(){
   if(!game.resumeCountdown)return;
 
   ctx.fillStyle="rgba(0,0,0,0.62)";
@@ -3254,6 +3769,7 @@ function update(dt){
 
       if(game.resumeCount<0){
         game.resumeCountdown=false;
+        game.last=performance.now();
       }
     }
 
@@ -3263,23 +3779,32 @@ function update(dt){
   if(!game.started){
     game.countdownTimer+=dt;
 
-    if(!game.showStart&&game.countdownTimer>=1){
-      game.countdownTimer=0;
-      game.countdown--;
+    if(!game.showStart){
+      if(game.countdownTimer>=1){
+        game.countdownTimer=0;
+        game.countdown--;
 
-      if(game.countdown<=0){
-        game.showStart=true;
-        game.startTimer=0;
+        if(game.countdown<=0){
+          game.showStart=true;
+          game.startTimer=0;
+        }
       }
-    }
-
-    if(game.showStart){
+    }else{
       game.startTimer+=dt;
 
       if(game.startTimer>=.7){
         game.started=true;
+        game.showStart=false;
+
+        game.time=0;
+        game.sessionPlayTime=0;
+        game.savedSessionSeconds=0;
+        game.last=performance.now();
+
         globalSave.totalPlays++;
         saveGlobal();
+
+        stopDrag();
       }
     }
 
