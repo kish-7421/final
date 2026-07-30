@@ -310,8 +310,29 @@ function handleDeath(){if(game.hasRevive&&!game.reviveUsed){game.reviveUsed=true
 function getPointerFromClient(clientX,clientY){const r=canvas.getBoundingClientRect();return{x:(clientX-r.left)*canvas.width/r.width,y:(clientY-r.top)*canvas.height/r.height}}function getPointer(e){const p=e.changedTouches?e.changedTouches[0]:e;return getPointerFromClient(p.clientX,p.clientY)}
 window.addEventListener("keydown",function(e){if(e.key==="w"||e.key==="W"||e.key==="ArrowUp")keys.up=true;if(e.key==="s"||e.key==="S"||e.key==="ArrowDown")keys.down=true;if(e.key==="a"||e.key==="A"||e.key==="ArrowLeft")keys.left=true;if(e.key==="d"||e.key==="D"||e.key==="ArrowRight")keys.right=true});
 window.addEventListener("keyup",function(e){if(e.key==="w"||e.key==="W"||e.key==="ArrowUp")keys.up=false;if(e.key==="s"||e.key==="S"||e.key==="ArrowDown")keys.down=false;if(e.key==="a"||e.key==="A"||e.key==="ArrowLeft")keys.left=false;if(e.key==="d"||e.key==="D"||e.key==="ArrowRight")keys.right=false});
-window.addEventListener("blur",autoPause);document.addEventListener("visibilitychange",function(){if(document.hidden)autoPause()});
-function autoPause(){if(game.started&&!game.gameOver&&!game.paused&&!game.cardOpen&&!game.penaltyOpen&&!game.bossRewardOpen&&!game.comboOpen&&!game.bossIntro&&!game.survivorOpen){game.paused=true;closeSubMenus();stopDrag();bankPlayTime();stopBgm()}}
+window.addEventListener("blur",autoPause);document.addEventListener("visibilitychange",function(){if(document.hidden)autoPause();else if(game&&game.paused&&game.resumeCountdown){game.resumeCountdown=false;game.resumeTimer=0;game.resumeCount=3}});
+function autoPause(){
+ if(!game||!game.started||game.gameOver)return;
+ // 재개 카운트다운 중 홈/앱전환/탭전환이 발생하면 상태를 완전히 초기화
+ if(game.resumeCountdown){
+   game.resumeCountdown=false;
+   game.resumeTimer=0;
+   game.resumeCount=3;
+   game.paused=true;
+   closeSubMenus();
+   stopDrag();
+   bankPlayTime();
+   stopBgm();
+   return
+ }
+ if(!game.paused&&!game.cardOpen&&!game.penaltyOpen&&!game.bossRewardOpen&&!game.comboOpen&&!game.bossIntro&&!game.survivorOpen){
+   game.paused=true;
+   closeSubMenus();
+   stopDrag();
+   bankPlayTime();
+   stopBgm()
+ }
+}
 function closeSubMenus(){game.settingsOpen=false;game.codexOpen=false;game.bossCodexOpen=false;game.achievementsOpen=false;game.statsOpen=false;game.recordsOpen=false;game.runCardsOpen=false;game.leaderboardOpen=false;game.confirmRestart=false}
 const pauseBtn={x:390,y:18,w:42,h:42};
 const menuButtons={resume:{x:135,y:160,w:180,h:40},restart:{x:135,y:208,w:180,h:40},settings:{x:135,y:256,w:180,h:40},codex:{x:135,y:304,w:180,h:40},bossCodex:{x:135,y:352,w:180,h:40},achievements:{x:135,y:400,w:180,h:40},stats:{x:135,y:448,w:180,h:40},runCards:{x:135,y:496,w:180,h:40},records:{x:135,y:544,w:180,h:40},leaderboard:{x:135,y:592,w:180,h:40},logout:{x:135,y:640,w:180,h:40},sound:{x:95,y:245,w:260,h:40},bgm:{x:95,y:295,w:260,h:40},master:{x:95,y:345,w:260,h:40},sfxVol:{x:95,y:395,w:260,h:40},bgmVol:{x:95,y:445,w:260,h:40},vibration:{x:95,y:495,w:260,h:40},lowMode:{x:95,y:545,w:260,h:40},survivorSkin:{x:95,y:595,w:260,h:40},back:{x:135,y:815,w:180,h:44},confirmYes:{x:245,y:510,w:120,h:44},confirmNo:{x:85,y:510,w:120,h:44},tutorialOk:{x:125,y:620,w:200,h:48}};
@@ -319,7 +340,7 @@ const scrollHeights={codex:0,boss:0,ach:0,records:0,run:0};
 let codexRows=[],bossCodexRows=[];
 function buttonHit(x,y,b){return x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h}
 function cycleVol(v){v+=.25;if(v>1.001)v=0;return Math.round(v*100)/100}
-function startResumeCountdown(){game.paused=false;game.resumeCountdown=true;game.resumeTimer=0;stopDrag()}
+function startResumeCountdown(){game.paused=false;game.resumeCountdown=true;game.resumeTimer=0;game.resumeCount=3;closeSubMenus();stopDrag()}
 function scrollPage(){if(game.codexOpen)return"codex";if(game.bossCodexOpen)return"boss";if(game.achievementsOpen)return"ach";if(game.recordsOpen)return"records";if(game.runCardsOpen)return"run";return""}
 function getScrollY(p){return scroll.y[p]||0}
 function setScrollY(p,v){scroll.y[p]=clamp(v,0,scrollMax(p))}
@@ -1890,7 +1911,19 @@ function drawSurvivor(){
   ctx.fillText("10분 생존 달성",0,72);
   ctx.restore();
 }
-function drawResumeCountdown(){if(!game.resumeCountdown)return;ctx.fillStyle="rgba(0,0,0,0.62)";ctx.fillRect(0,0,W,H);ctx.save();ctx.shadowColor="white";ctx.shadowBlur=20;ctx.fillStyle="white";ctx.textAlign="center";ctx.font="58px Arial";ctx.fillText(game.resumeTimer<.5?"READY":"START!",W/2,H/2);ctx.restore()}
+function drawResumeCountdown(){
+ if(!game.resumeCountdown||game.paused)return;
+ const t=game.resumeTimer;
+ const text=t<.5?"READY":"START!";
+ ctx.save();
+ ctx.textAlign="center";
+ ctx.fillStyle="#fff";
+ ctx.font="48px Arial";
+ ctx.shadowColor="#fff";
+ ctx.shadowBlur=18;
+ ctx.fillText(text,W/2,H/2);
+ ctx.restore()
+}
 function update(dt){if(!authState.ready)return;if(game.tutorialOpen)return;if(game.paused)return;if(game.resumeCountdown){game.resumeTimer+=dt;if(game.resumeTimer>=1){game.resumeCountdown=false;game.resumeTimer=0}return}if(!game.started){game.countdownTimer+=dt;if(!game.showStart&&game.countdownTimer>=1){game.countdownTimer=0;game.countdown--;if(game.countdown<=0){game.showStart=true;game.startTimer=0}}if(game.showStart){game.startTimer+=dt;if(game.startTimer>=.7){game.started=true;globalSave.totalPlays++;saveGlobal()}}return}if(game.gameOver)return;if(game.bossIntro){updateBossIntro(dt);updateEffects(dt);return}if(game.survivorOpen){game.survivorTimer+=dt;updateEffects(dt);if(game.survivorTimer>=2)game.survivorOpen=false;return}if(game.comboOpen){updateCombo(dt);updateEffects(dt);return}if(game.bossRewardOpen){updateBossReward(dt);updateEffects(dt);return}if(game.cardOpen||game.penaltyOpen){updateCards(dt);updateEffects(dt);return}game.time+=dt;game.sessionPlayTime+=dt;updateCards(dt);if(game.cardOpen||game.penaltyOpen){updateEffects(dt);return}updateInput();updatePlayer(dt);updateBoss(dt);updateAttacks(dt);updateSpecials(dt);updateBullets(dt);updateSpecialObjects(dt);updateRules(dt);updateEffects(dt)}
 function render(){drawBackground();drawArena();drawBullets();drawSpecialObjects();drawWarnings();drawPlayer();drawUI();drawTexts();drawCards();drawBossReward();drawBossIntro();drawCombo();drawSurvivor();drawPauseMenu();drawResumeCountdown();drawTutorial();if(!game.started&&!game.tutorialOpen){ctx.save();ctx.shadowColor="white";ctx.shadowBlur=18;ctx.fillStyle="white";ctx.textAlign="center";if(game.showStart){ctx.font="60px Arial";ctx.fillText("START!",W/2,H/2)}else{ctx.font="90px Arial";ctx.fillText(game.countdown,W/2,H/2)}ctx.restore()}}
 function loop(timestamp){if(!game.last)game.last=timestamp;const dt=Math.min((timestamp-game.last)/1000,.05);game.last=timestamp;update(dt);updateBgm();render();requestAnimationFrame(loop)}
